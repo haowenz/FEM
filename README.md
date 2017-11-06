@@ -5,12 +5,12 @@ FEM is a Fast and Efficient short read Mapper.
 Currently, we provide binaries compiled with gcc 5.3.0 on CentOS 7.2. The source code will be available soon.
 
 ### Indexing
-```sh
+```
 FEM index <window size> <step size> <reference.fa> 
 ```
 
 ### Mapping
-```sh
+```
 Usage:   FEM align [options] 
 
 Options:
