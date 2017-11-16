@@ -17,7 +17,7 @@ Options:
          -e        INT    error threshold 
          -t        INT    number of threads 
          -f        STR    seeding algorithm: "g" for group seeding and "vl" for variable-length seeding 
-         -a        INT    number of additional q-grams (only for test)
+         -a               whether to use one additional q-gram (only for test)
 
 Input/output: 
          --ref     STR    Input reference file
