@@ -2,7 +2,7 @@
  * indextools.c
  *
  *  Created on: Mar 24, 2016
- *      Author: howen
+ *      Author: haowen
  */
 
 #include "indextools.h"
@@ -55,8 +55,6 @@ int loadIndex() {
     //load the int bases of reference
     tmp = fread(reference.bases, sizeof(uint8_t),refLookupTable[reference.refNum], index_fp);
 
-    //the pointer to intBases should not change
-
     //load the hash table
     //load the lookup table
     tmp = fread(lookup_table,sizeof(int), max_hash_value + 2, index_fp);
@@ -68,7 +66,7 @@ int loadIndex() {
 
     tmp = fread(occurrence_table, sizeof(uint32_t), hash_table_size, index_fp);
 
-    fprintf(stderr, "Hash value max: %d, refNum=%d, load in %fs!\n", max_hash_value,reference.refNum, realtime() - startTime);
+    fprintf(stderr, "Max hash value: %d, number of reference sequences: %d, load in %fs!\n", max_hash_value,reference.refNum, realtime() - startTime);
     return tmp;
 }
 
@@ -89,7 +87,7 @@ int init_saving_index() {
     int tmp = -1;
 	index_fp = fopen(index_file_name, "w");
     int refNum = reference.refNum;
-    fprintf(stderr, "Number of reference sequences = %d.\n", refNum);
+    fprintf(stderr, "Number of reference sequences: %d.\n", refNum);
 	tmp = fwrite(&refNum, sizeof(int), 1, index_fp);
 	tmp = fwrite(&window_size, sizeof(int), 1, index_fp);
 	tmp = fwrite(&step_size, sizeof(int), 1, index_fp);
@@ -156,7 +154,7 @@ int construct_index() {
     hash_table_size = sum;
 
     fprintf(stderr, "Number of hashed bases: %d\n",lookup_table[max_hash_value]);
-    fprintf(stderr, "Generated hash table in %fs.\nMax hash value=%d, hash size=%ud.\n", realtime() - startTime, max_hash_value, hash_table_size);
+    fprintf(stderr, "Generated hash table in %fs.\nMax hash value: %d, hash table size: %u.\n", realtime() - startTime, max_hash_value, hash_table_size);
     return 0;
 }
 
@@ -171,8 +169,6 @@ int save_index() {
     for (int i = 0; i < reference.refNum; ++i) {
         char* refName = reference.names[i];
         int refLen = reference.lookupTable[i + 1] - reference.lookupTable[i];
-        //refNames.push(string(refName));
-        //refLens.push(ref->lookupTable[i+1]-ref->lookupTable[i]);
         int length = sprintf(hd, "@SQ\tSN:%s\tLN:%d\n", refName, refLen);
 		tmp = fwrite(hd, sizeof(char), length, header_fp);
         tmp = fwrite(refName, sizeof(char), REF_NAME_LEN_MAX, index_fp);
@@ -214,5 +210,3 @@ void save_header() {
 void finalize_saving_header() {
 	fclose(header_fp);
 }
-
-
