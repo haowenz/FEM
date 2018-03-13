@@ -1,9 +1,14 @@
 # FEM
 FEM is a Fast and Efficient short read Mapper. 
 
-## Usage
-Currently, we provide binaries compiled with gcc 5.3.0 on CentOS 7.2. The source code will be available soon.
+## News
+### 03/13/2018
+We pushed the source code of FEM purely in C to replace the old hybrid one. 
 
+### 03/10/2018
+The source code of FEM is avaliable. We removed the dependence on Intel TBB library so that FEM can be easily used and tested. A parallel sorting without dependency on third party libraries will be added to FEM soon.
+
+## Usage
 ### Indexing
 ```
 FEM index <window size> <step size> <reference.fa> 
