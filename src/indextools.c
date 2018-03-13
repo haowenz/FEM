@@ -35,7 +35,7 @@ int initLoadIndex() {
 
     max_hash_value = (int)(pow(4, window_size))-1;
 
-    lookup_table = (int*) malloc(sizeof(int) * (max_hash_value+1));
+    lookup_table = (int*) malloc(sizeof(int) * (max_hash_value+2));
     assert(lookup_table);
 
     return 1;
@@ -66,7 +66,7 @@ int loadIndex() {
 
     tmp = fread(occurrence_table, sizeof(uint32_t), hash_table_size, index_fp);
 
-    fprintf(stderr, "Max hash value: %d, number of reference sequences: %d, load in %fs!\n", max_hash_value,reference.refNum, realtime() - startTime);
+    fprintf(stderr, "Max hash value: %d, number of reference sequences: %d, number of bases: %d, load in %fs!\n", max_hash_value, reference.refNum, reference.lookupTable[reference.refNum] - reference.lookupTable[0],  realtime() - startTime);
     return tmp;
 }
 
@@ -101,7 +101,7 @@ int init_saving_index() {
     }
     max_hash_value = (int)(pow(4, window_size)) - 1;
 
-    lookup_table = (int*) malloc(sizeof(int) * (max_hash_value+1));
+    lookup_table = (int*) malloc(sizeof(int) * (max_hash_value+2));
     assert(lookup_table);
     occurrence_table= (uint32_t*) malloc(sizeof(uint32_t) * hash_table_size);
     assert(occurrence_table);

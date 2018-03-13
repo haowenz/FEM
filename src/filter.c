@@ -313,6 +313,12 @@ uint32_t groupSeedingCandidateGenerator(const Read *read, const int reverseCompl
     if(window_size%step_size>0){
         coveredNum++;
     }
+
+    int minTotalSubSeedNum = (read->length - window_size + 1 - step_size)/step_size;
+    if (coveredNum * (edit_distance + 1 +additional_gram_num) > minTotalSubSeedNum) {
+        return 0;
+    }
+
     uint32_t totalCandidatesCount = 0;
     *candiNumWithoutAddFilter=0;
     uint32_t count = 0;
@@ -356,7 +362,7 @@ uint32_t groupSeedingCandidateGenerator(const Read *read, const int reverseCompl
             locations = occurrence_table + lookup_table[swapOptCandidates[ki].hashValue];
             locationNum = swapOptCandidates[ki].locationsNum;
 
-            int tempIndex = 0;
+            uint32_t tempIndex = 0;
             uint32_t ci = 0;
             uint32_t j = 0;
             int additionalPrefix = ki - edit_distance;
@@ -449,6 +455,10 @@ uint32_t variableLengthSeedingCandidateGenerator(const Read *read, const int rev
 //dp for seed selection start
     int seedLengthMin = window_size + step_size - 1;
 	int scanSize = read->length - window_size + 1;
+
+    if (seedLengthMin * (edit_distance + 1 + additional_gram_num) > read->length) {
+        return 0;
+    }
 
     uint32_t tempCandidateNums[scanSize];
     int tempHashValues[scanSize];

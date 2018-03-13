@@ -113,7 +113,7 @@ int align_main(int argc, char *argv[]) {
     loadIndex();
 
     double startTime = realtime();
-    fprintf(stderr, "Window_size: %d.\n", window_size);
+    fprintf(stderr, "Window_size: %d, step_size: %d.\n", window_size, step_size);
     finished_thread_num = 0;
     int thread_id_array[cpu_thread_num];
     for (int i = 0; i < cpu_thread_num; ++i) {

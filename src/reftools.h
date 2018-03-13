@@ -13,7 +13,7 @@
 #include <assert.h>
 
 #define REF_NUM_MAX 128
-#define REF_NAME_LEN_MAX 100
+#define REF_NAME_LEN_MAX 128
 #define REF_LEN_MAX 3500000000
 
 typedef struct{
