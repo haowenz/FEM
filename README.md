@@ -29,6 +29,9 @@ Input/output:
 ## Parameters
 To reduce mapping time, we recommend to use the smallest step size as long as the index can fit into the memory. In next version, FEM will choose the step size according to given memory adaptively. 
 
+## Citing FEM
+If you use FEM, please cite [Fast and efficient short read mapping based on a succinct hash index](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-018-2094-5).
+
 ## Contacts
 Weiguo Liu <br />
 Email: weiguo.liu@sdu.edu.cn
