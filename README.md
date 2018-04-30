@@ -3,7 +3,7 @@ FEM is a Fast and Efficient short read Mapper. Currently, FEM can return all map
 
 ## News
 ### 03/13/2018
-We pushed the source code of FEM purely in C to replace the old hybrid one. 
+We pushed the source code of FEM purely in C to replace the old hybrid one. Note that the index construction becomes slower since qsort is slower than STL sort.
 
 ### 03/10/2018
 The source code of FEM is avaliable. We removed the dependence on Intel TBB library so that FEM can be easily used and tested. A parallel sorting without dependency on third party libraries will be added to FEM soon.
