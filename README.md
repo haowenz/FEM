@@ -1,5 +1,5 @@
 # FEM
-FEM is a Fast and Efficient short read Mapper. 
+FEM is a Fast and Efficient short read Mapper. Currently, FEM can return all mapping locations of NGS single-end short reads with up to 7 errors.
 
 ## News
 ### 03/13/2018
@@ -38,10 +38,7 @@ To reduce mapping time, we recommend to use the smallest step size as long as th
 If you use FEM, please cite [Fast and efficient short read mapping based on a succinct hash index](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-018-2094-5).
 
 ## Contacts
-Weiguo Liu <br />
-Email: weiguo.liu@sdu.edu.cn
-
 Haowen Zhang <br />
 Email: hwzhang@gatech.edu
 
-We welcome any bug report and suggestion.
+We welcome any bug report and suggestion. Please start an issue in the repo.
