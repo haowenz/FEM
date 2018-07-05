@@ -1,9 +1,9 @@
 # FEM
-FEM is a Fast and Efficient short read Mapper. 
+FEM is a Fast and Efficient short read Mapper. Currently, FEM can return all mapping locations of NGS single-end short reads with up to 7 errors.
 
 ## News
 ### 03/13/2018
-We pushed the source code of FEM purely in C to replace the old hybrid one. 
+We pushed the source code of FEM purely in C to replace the old hybrid one. Note that the index construction becomes slower since qsort is slower than STL sort.
 
 ### 03/10/2018
 The source code of FEM is avaliable. We removed the dependence on Intel TBB library so that FEM can be easily used and tested. A parallel sorting without dependency on third party libraries will be added to FEM soon.
@@ -38,10 +38,7 @@ To reduce mapping time, we recommend to use the smallest step size as long as th
 If you use FEM, please cite [Fast and efficient short read mapping based on a succinct hash index](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-018-2094-5).
 
 ## Contacts
-Weiguo Liu <br />
-Email: weiguo.liu@sdu.edu.cn
-
 Haowen Zhang <br />
 Email: hwzhang@gatech.edu
 
-We welcome any bug report and suggestion.
+We welcome any bug report and suggestion. Please start an issue in the repo.
