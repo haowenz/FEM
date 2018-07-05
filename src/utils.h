@@ -41,14 +41,14 @@
     }
 
 #define __UTILS_HASH_VALUE 	 \
-static inline uint64_t hashValue(const uint8_t *seq,int windowSize) {\
+static inline int hashValue(const uint8_t *seq,int windowSize) {\
 	int i = 0;\
-	uint64_t val = 0;\
+	int val = 0;\
 	while (i < windowSize) {\
 		if (seq[i] == (uint8_t) 4) {\
 			return -1;\
 		}\
-		val = (val << 2) | (uint64_t) (seq[i]);\
+		val = (val << 2) | (int) (seq[i]);\
 		i++;\
 	}\
 	return val;\
