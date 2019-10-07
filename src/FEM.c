@@ -4,7 +4,7 @@
 #include "FEM-index.h"
 #include "utils.h"
 
-#define PACKAGE_VERSION "1.1"
+#define PACKAGE_VERSION "0.1"
 
 static int print_usage() {
     fprintf(stderr, "\n");
