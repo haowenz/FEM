@@ -3,10 +3,10 @@ src_dir=src
 objs_dir=objs
 objs+=$(patsubst %.c, $(objs_dir)/%.o, $(c_source))
 
-cxx=gcc-9
+cxx=gcc
 cxxflags=-Wall -O3 -march=native
 
-ldflags=-lpthread
+ldflags=-lpthread -lm
 exec=FEM
 
 all: dir $(exec) 
