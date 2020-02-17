@@ -104,7 +104,8 @@ void clearOutputQueue() {
 }
 
 void initOutput() {
-	outputMutex = PTHREAD_MUTEX_INITIALIZER;
+	//outputMutex = PTHREAD_MUTEX_INITIALIZER;
+  pthread_mutex_init(&outputMutex, NULL);
 	result_file_fp = fopen(result_file_name, "w");
 	if (result_file_fp == NULL) {
 		fprintf(stderr, "Cannot open output file.\n");

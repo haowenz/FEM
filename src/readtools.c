@@ -136,7 +136,8 @@ void resetReadFile() {
 
 void initReadFile() {
 	/*single-end mode*/
-	readMutex1= PTHREAD_MUTEX_INITIALIZER;
+	//readMutex1= PTHREAD_MUTEX_INITIALIZER;
+	pthread_mutex_init(&readMutex1, NULL);
 
 	read_seq_fp1 = fopen(read_file_name1, "r");
 	if (read_seq_fp1 == NULL) {
