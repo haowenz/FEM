@@ -175,7 +175,7 @@ void vlNewOptPrefixGrams(uint32_t readLen,uint32_t gramLen,vlCandidate *optCandi
 
 
 
-inline void gOptPrefixGrams(int kmerSize,int readLen, gCandidate *kmerCandidates, gCandidate *swapKmerCandidates, uint32_t *totalCandiNum) {
+void gOptPrefixGrams(int kmerSize,int readLen, gCandidate *kmerCandidates, gCandidate *swapKmerCandidates, uint32_t *totalCandiNum) {
     int row = edit_distance + 1 + additional_gram_num + 1;
     int col = readLen - (edit_distance + 1 + additional_gram_num) * kmerSize + 1 + 1;
     int M[row][col];
@@ -221,7 +221,7 @@ inline void gOptPrefixGrams(int kmerSize,int readLen, gCandidate *kmerCandidates
 }
 
 
-inline void vlOptPrefixGrams(int kmerSize,int readLen, vlCandidate *kmerCandidates, vlCandidate *swapKmerCandidates, uint32_t *totalCandiNum) {
+void vlOptPrefixGrams(int kmerSize,int readLen, vlCandidate *kmerCandidates, vlCandidate *swapKmerCandidates, uint32_t *totalCandiNum) {
 	int row = edit_distance + 1 + additional_gram_num + 1;
 	int col = readLen - (edit_distance + 1 + additional_gram_num) * kmerSize + 1 + 1;
 	int M[row][col];

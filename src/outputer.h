@@ -46,7 +46,6 @@ typedef struct {
 void initOutputQueue();
 void destroyOutputQueue() ;
 int pushOutputQueue(char* result);
-inline int popOutputQueue(char* result);
 void clearOutputQueue();
 void initOutput();
 void outputHeaderFromIndexFile();

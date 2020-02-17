@@ -59,11 +59,6 @@ int pushOutputQueue(char* result) {
 	return 1;
 }
 
-inline int popOutputQueue(char* result) {
-
-	return 1;
-}
-
 void outputQueueThread() {
 	while (finished_thread_num < cpu_thread_num) {
 		char *resultStr;

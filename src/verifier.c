@@ -178,9 +178,9 @@ int CPUSBMKernel(const uint8_t* pattern, const uint8_t *text, int *location,
 	return error;
 }
 
-#pragma GCC push_options
-#pragma GCC optimize ("unroll-loops")
-inline void CPUVMBMKernel(const uint32_t regIndex, const uint8_t* text, const int readLen, const uint32_t *candidates, const uint32_t candiNum,int16_t *errors, int16_t *locations) {
+//#pragma GCC push_options
+//#pragma GCC optimize ("unroll-loops")
+void CPUVMBMKernel(const uint32_t regIndex, const uint8_t* text, const int readLen, const uint32_t *candidates, const uint32_t candiNum,int16_t *errors, int16_t *locations) {
 	int refLen = readLen + 2 * edit_distance;
 	int band_length = 2 * edit_distance + 1;
 	int bandLenMask = 0;
@@ -450,9 +450,9 @@ inline void CPUVMBMKernel(const uint32_t regIndex, const uint8_t* text, const in
 	_mm_store_si128((__m128i *) errors, tmpErrs);
 	_mm_store_si128((__m128i *) locations, tmpLocs);
 }
-#pragma GCC pop_options
+//#pragma GCC pop_options
 
-inline int CPUAlignKernel(const uint8_t* pattern, const uint8_t* text, int match_site, char* cigar, const int readLen) {
+int CPUAlignKernel(const uint8_t* pattern, const uint8_t* text, int match_site, char* cigar, const int readLen) {
 	int refLen = readLen + 2 * edit_distance;
 	int band_down = 2 * edit_distance;
 	int band_length = 2 * edit_distance + 1;
@@ -644,7 +644,7 @@ inline int CPUAlignKernel(const uint8_t* pattern, const uint8_t* text, int match
 
 }
 
-inline void CPUNMTag(const uint8_t* pattern, const uint8_t* text, int startLocation, char* cigar, char* NM) {
+void CPUNMTag(const uint8_t* pattern, const uint8_t* text, int startLocation, char* cigar, char* NM) {
 	NM[0] = '\0';
 	int cigarLen = strlen(cigar);
 	char num[READ_LEN_MAX];
@@ -726,7 +726,7 @@ inline void CPUNMTag(const uint8_t* pattern, const uint8_t* text, int startLocat
 	}
 }
 
-inline void genOneResult(const int refIndex,const Read *read, const int rc, const int secondary,
+void genOneResult(const int refIndex,const Read *read, const int rc, const int secondary,
 		const int location, const char* cigar, const int err, const char* MD,
 		uint32_t *resultStrLen, char** resultStr) {
 	char result[1000];

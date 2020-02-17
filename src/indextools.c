@@ -116,7 +116,7 @@ int construct_index() {
     HashLocationPair* _tmpOccurrenceTable = (HashLocationPair*) malloc(sizeof(HashLocationPair) * hash_table_size);
     //Compute hash value of each element
     for (int j = 0; j < reference.refNum; ++j) {
-#pragma omp parallel for
+//#pragma omp parallel for
         for (uint32_t i = reference.lookupTable[j]; i < reference.lookupTable[j+1] - window_size + 1; i += step_size) {
             _tmpOccurrenceTable[i/step_size].location = i;
             int hashVal = hashValue(reference.bases + i, window_size);
