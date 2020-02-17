@@ -414,13 +414,38 @@ inline void CPUVMBMKernel(const uint32_t regIndex, const uint8_t* text, const in
 		tmpMask1 = _mm_and_si128(tmpMask1, tmpMask2);
 		int tmp = _mm_movemask_epi8(tmpMask1);
 //#pragma unroll (V_CPU)
-		for (int pi = 0; pi < V_CPU; ++pi) {
-			if (tmp & (1 << (pi * 2))) {
-			   tmpLocs = _mm_insert_epi16(tmpLocs, site + i + 1, pi);
-			}
-		}
-		VP = _mm_srli_epi16(VP, 1);
-		VN = _mm_srli_epi16(VN, 1);
+    //for (int pi = 0; pi < V_CPU; ++pi) {
+    //  if (tmp & (1 << (pi * 2))) {
+    //    tmpLocs = _mm_insert_epi16(tmpLocs, site + i + 1, pi);
+    //  }
+    //}
+    if (tmp & (1 << (0 * 2))) {
+      tmpLocs = _mm_insert_epi16(tmpLocs, site + i + 1, 0);
+    }
+    if (tmp & (1 << (1 * 2))) {
+      tmpLocs = _mm_insert_epi16(tmpLocs, site + i + 1, 1);
+    }
+    if (tmp & (1 << (2 * 2))) {
+      tmpLocs = _mm_insert_epi16(tmpLocs, site + i + 1, 2);
+    }
+    if (tmp & (1 << (3 * 2))) {
+      tmpLocs = _mm_insert_epi16(tmpLocs, site + i + 1, 3);
+    }
+    if (tmp & (1 << (4 * 2))) {
+      tmpLocs = _mm_insert_epi16(tmpLocs, site + i + 1, 4);
+    }
+    if (tmp & (1 << (5 * 2))) {
+      tmpLocs = _mm_insert_epi16(tmpLocs, site + i + 1, 5);
+    }
+    if (tmp & (1 << (6 * 2))) {
+      tmpLocs = _mm_insert_epi16(tmpLocs, site + i + 1, 6);
+    }
+    if (tmp & (1 << (7 * 2))) {
+      tmpLocs = _mm_insert_epi16(tmpLocs, site + i + 1, 7);
+    }
+
+    VP = _mm_srli_epi16(VP, 1);
+    VN = _mm_srli_epi16(VN, 1);
 	}
 	_mm_store_si128((__m128i *) errors, tmpErrs);
 	_mm_store_si128((__m128i *) locations, tmpLocs);
