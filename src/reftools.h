@@ -1,10 +1,3 @@
-/*
- * reftools.h
- *
- *  Created on: Mar 24, 2016
- *      Author: howen
- */
-
 #ifndef REFTOOLS_H_
 #define REFTOOLS_H_
 
@@ -17,20 +10,20 @@
 #define REF_LEN_MAX 3500000000
 
 typedef struct{
-    int refNum;
-    uint32_t lookupTable[REF_NUM_MAX];
-    char names[REF_NUM_MAX][REF_NAME_LEN_MAX];
-    uint8_t *bases;
+  int refNum;
+  uint32_t lookupTable[REF_NUM_MAX];
+  char names[REF_NUM_MAX][REF_NAME_LEN_MAX];
+  uint8_t *bases;
 } Reference;
 
 extern Reference reference;
 extern char *ref_file_name;
 
-int countKmer(Reference *ref,uint32_t hashValue,int kmerLength);
-void initRefFile();
-void finalizeRefFile();
-void initRef(Reference *ref);
-int getRef(Reference *ref);
-void destroyRef(Reference *ref);
+int count_kmer(Reference *ref, uint32_t hashValue, int kmerLength);
+void initialize_ref_file();
+void finalize_ref_file();
+void initialize_ref(Reference *ref);
+int get_ref(Reference *ref);
+void destroy_ref(Reference *ref);
 
-#endif /* SRC_REFTOOLS_H_ */
+#endif /* REFTOOLS_H_ */

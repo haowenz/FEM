@@ -1,10 +1,3 @@
-/*
- * indextools.h
- *
- *  Created on: Mar 24, 2016
- *      Author: howen
- */
-
 #ifndef INDEXTOOLS_H_
 #define INDEXTOOLS_H_
 
@@ -17,13 +10,13 @@ extern uint32_t hash_table_size;
 extern uint32_t *occurrence_table;
 extern int *lookup_table;
 
-int initLoadIndex();
-int loadIndex();
-void finalizeLoadIndex();
-void init_saving_header();
+int initialize_loading_index();
+int load_index();
+void finalize_loading_index();
+void initialize_saving_header();
 void finalize_saving_header();
 
-int init_saving_index(); 
+int initialize_saving_index(); 
 int construct_index();
 int save_index(); 
 int finalize_saving_index(); 

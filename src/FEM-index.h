@@ -1,5 +1,5 @@
-#if !defined(INDEX_H)
-#define      INDEX_H
+#ifndef FEM_INDEX_H
+#define FEM_INDEX_H
 
 #include "utils.h"
 #include "reftools.h"

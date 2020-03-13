@@ -1,10 +1,3 @@
-/*
- * mapper.h
- *
- *  Created on: Mar 24, 2016
- *      Author: howen
- */
-
 #ifndef MAPPER_H_
 #define MAPPER_H_
 
@@ -29,11 +22,11 @@ extern uint32_t mapping_num[256];
 extern uint32_t read_count[256];
 extern uint32_t (*novelCandidateGenerator)(const Read *read, const int rc, uint32_t **candidates,uint32_t **swapCandidates,uint32_t *maxCandiNum,TwoTuple **candis, TwoTuple **tempCandis, uint32_t *tupleNum,uint32_t *candiNumWithoutAddFilter);
 
-void initMapper();
-void finalizeMapper();
-int CPUMap(int threadID);
-void *startCPUThread(void *arg);
-void *startSingleReadQueueThread(void *arg);
-void *startOutputQueueThread(void *arg);
+void initialize_mapper();
+void finalize_mapper();
+int CPU_map(int threadID);
+void *start_CPU_thread(void *arg);
+void *start_single_read_queue_thread(void *arg);
+void *start_output_queue_thread(void *arg);
 
 #endif /* MAPPER_H_ */

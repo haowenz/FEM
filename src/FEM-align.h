@@ -1,5 +1,5 @@
-#if !defined(ALIGN_H)
-#define      ALIGN_H
+#ifndef FEM_ALIGN_H
+#define FEM_ALIGN_H
 
 #include <getopt.h>
 #include <assert.h>

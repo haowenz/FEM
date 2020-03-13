@@ -7,20 +7,20 @@
 
 #include "utils.h"
 
-double cputime() {
+double get_cpu_time() {
 	struct rusage r;
 	getrusage(RUSAGE_SELF, &r);
 	return r.ru_utime.tv_sec + r.ru_stime.tv_sec + 1e-6 * (r.ru_utime.tv_usec + r.ru_stime.tv_usec);
 }
 
-double realtime() {
+double get_real_time() {
 	struct timeval tp;
 	struct timezone tzp;
 	gettimeofday(&tp, &tzp);
 	return tp.tv_sec + tp.tv_usec * 1e-6;
 }
 
-int compareSubSeed(const void *ta, const void *tb) {
+int compare_sub_seed(const void *ta, const void *tb) {
     SubSeed my_ta = *(SubSeed *) ta;
     SubSeed my_tb = *(SubSeed *) tb;
     if (my_ta.locationNum > my_tb.locationNum) {
@@ -32,7 +32,7 @@ int compareSubSeed(const void *ta, const void *tb) {
     }
 }
 
-int comparegCandidate(const void *ta, const void *tb) {
+int compare_gCandidate(const void *ta, const void *tb) {
     gCandidate my_ta = *(gCandidate *) ta;
     gCandidate my_tb = *(gCandidate *) tb;
     if (my_ta.locationsNum > my_tb.locationsNum) {
