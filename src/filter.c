@@ -2,77 +2,67 @@
 
 __UTILS_HASH_VALUE
 
-void generate_optimal_prefix_qgram_for_group_seeding_new(uint32_t readLen,uint32_t gramLen,gCandidate *optCandidates, gCandidate *swapOptCandidates, uint32_t *totalCandidatesNum) {
-  uint32_t nGrams = readLen - gramLen + 1;
+void generate_optimal_prefix_qgram_for_group_seeding_new(uint32_t read_length, uint32_t gramLen, gCandidate *optCandidates, gCandidate *swapOptCandidates, uint32_t *totalCandidatesNum) {
+  uint32_t nGrams = read_length - gramLen + 1;
   //if(nGrams > invertedLists.size()){ cerr << "Assertion Failed: not enough inverted lists" << endl; exit(1); }
-  int nSeeds = edit_distance + 2;
-
+  int nSeeds = error_threshold + 2;
   entry matrix[nSeeds][nGrams - nSeeds*gramLen + gramLen];
-
   uint32_t offset;
   uint32_t min_size, bsize, esize;
-  for(int r = 0; r < nSeeds; r++){
+  for (int r = 0; r < nSeeds; r++) {
     int start = (nSeeds - r - 1)*gramLen;
     int end = nGrams - r*gramLen;
-    for(int c = start; c < end; c++){
+    for (int c = start; c < end; c++){
       int idx = c - start;
-
       offset = 0;
       min_size = bsize = optCandidates[c].locationsNum;//invertedLists[c].second->size();
       uint64_t min_cost = INT_MAX; 
-
-      for(int i = 0; i < end - start - idx; i++){
+      for (int i = 0; i < end - start - idx; i++) {
         esize = optCandidates[c+i].locationsNum;//invertedLists[c+i].second->size();
-
         //cost estimation
         uint64_t cost = (i == 0 ? bsize : bsize + esize);
         //if(type == SELECT_INDEL || type == SELECT_HEURISTIC_INDEL){
         if(esize < min_size) min_size = esize;
         uint32_t factor = ((int)gramLen < i ? 2*gramLen : gramLen+i);
         factor *= 10;
-        cost += min_size*(readLen + edit_distance)*edit_distance/factor;
+        cost += min_size * (read_length + error_threshold) * error_threshold / factor;
         //}
         //else if(type == SELECT_SUBST) cost += 0;
-
-        if(r != 0) cost += matrix[r-1][matrix[r-1][i + idx].ptr].cost;
-
-        if(cost < min_cost){
+        if (r != 0) {
+          cost += matrix[r-1][matrix[r-1][i + idx].ptr].cost;
+        }
+        if (cost < min_cost) {
           min_cost = cost;
           offset = i;
         }
       }
-
       matrix[r][idx].cost = min_cost;
       matrix[r][idx].offset = offset;
     }
-
-    matrix[r][end-start-1].ptr = end-start-1;
+    matrix[r][end-start - 1].ptr = end-start - 1;
     for(int i = end - start - 2; i >= 0; i--){
-      if(matrix[r][i].cost > matrix[r][matrix[r][i+1].ptr].cost)
-        matrix[r][i].ptr = matrix[r][i+1].ptr;
-      else matrix[r][i].ptr = i;
+      if (matrix[r][i].cost > matrix[r][matrix[r][i + 1].ptr].cost) {
+        matrix[r][i].ptr = matrix[r][i + 1].ptr;
+      } else {
+        matrix[r][i].ptr = i;
+      }
     }
   }
 
   // calculate prefix lists and save it into prefixLists
   //prefixLists.clear();
-
   int s = 0;
-  for(int i = 0; i < nSeeds; i++){
+  for (int i = 0; i < nSeeds; i++) {
     int r = nSeeds - i - 1;
-
     s = matrix[r][s].ptr;
     offset = matrix[r][s].offset;
-
     swapOptCandidates[i].site = optCandidates[i*gramLen + s + offset].site;
     swapOptCandidates[i].hashValue = optCandidates[i*gramLen + s + offset].hashValue;
     swapOptCandidates[i].locationsNum = optCandidates[i*gramLen + s + offset].locationsNum;
     *totalCandidatesNum += swapOptCandidates[i].locationsNum;
     // prefixLists.push_back(ListIterWrapper(i*gramLen + s, i*gramLen + s + offset, invertedLists));
-
     s += offset;
   }
-
   // sort prefix lists in ascending order of their sizes
   //for (uint32_t i = 0; i < prefixLists.size(); i++) 
   //    for (int j = i + 1; j < nSeeds; j++) 
@@ -85,75 +75,66 @@ void generate_optimal_prefix_qgram_for_group_seeding_new(uint32_t readLen,uint32
 
 
 
-void generate_optimal_prefix_qgram_for_variable_length_seeding_new(uint32_t readLen,uint32_t gramLen,vlCandidate *optCandidates, vlCandidate *swapOptCandidates, uint32_t *totalCandidatesNum){
-  uint32_t nGrams = readLen - gramLen + 1;
+void generate_optimal_prefix_qgram_for_variable_length_seeding_new(uint32_t read_length, uint32_t gramLen, vlCandidate *optCandidates, vlCandidate *swapOptCandidates, uint32_t *totalCandidatesNum) {
+  uint32_t nGrams = read_length - gramLen + 1;
   //if(nGrams > invertedLists.size()){ cerr << "Assertion Failed: not enough inverted lists" << endl; exit(1); }
-  int nSeeds = edit_distance + 2;
-
+  int nSeeds = error_threshold + 2;
   entry matrix[nSeeds][nGrams - nSeeds*gramLen + gramLen];
-
   uint32_t offset;
   uint32_t min_size, bsize, esize;
-  for(int r = 0; r < nSeeds; r++){
+  for (int r = 0; r < nSeeds; r++) {
     int start = (nSeeds - r - 1)*gramLen;
     int end = nGrams - r*gramLen;
-    for(int c = start; c < end; c++){
+    for (int c = start; c < end; c++) {
       int idx = c - start;
-
       offset = 0;
       min_size = bsize = optCandidates[c].locationsNum;//invertedLists[c].second->size();
       uint64_t min_cost = INT_MAX; 
-
-      for(int i = 0; i < end - start - idx; i++){
+      for (int i = 0; i < end - start - idx; i++) {
         esize = optCandidates[c+i].locationsNum;//invertedLists[c+i].second->size();
-
         //cost estimation
         uint64_t cost = (i == 0 ? bsize : bsize + esize);
         //if(type == SELECT_INDEL || type == SELECT_HEURISTIC_INDEL){
         if(esize < min_size) min_size = esize;
         uint32_t factor = ((int)gramLen < i ? 2*gramLen : gramLen+i);
         factor *= 10;
-        cost += min_size*(readLen + edit_distance)*edit_distance/factor;
+        cost += min_size * (read_length + error_threshold) * error_threshold / factor;
         //}
         //else if(type == SELECT_SUBST) cost += 0;
-
-        if(r != 0) cost += matrix[r-1][matrix[r-1][i + idx].ptr].cost;
-
-        if(cost < min_cost){
+        if (r != 0) {
+          cost += matrix[r-1][matrix[r-1][i + idx].ptr].cost;
+        }
+        if (cost < min_cost) {
           min_cost = cost;
           offset = i;
         }
       }
-
       matrix[r][idx].cost = min_cost;
       matrix[r][idx].offset = offset;
     }
-
-    matrix[r][end-start-1].ptr = end-start-1;
+    matrix[r][end-start - 1].ptr = end - start - 1;
     for(int i = end - start - 2; i >= 0; i--){
-      if(matrix[r][i].cost > matrix[r][matrix[r][i+1].ptr].cost)
+      if(matrix[r][i].cost > matrix[r][matrix[r][i + 1].ptr].cost) {
         matrix[r][i].ptr = matrix[r][i+1].ptr;
-      else matrix[r][i].ptr = i;
+      } else {
+        matrix[r][i].ptr = i;
+      }
     }
   }
 
   // calculate prefix lists and save it into prefixLists
   //prefixLists.clear();
-
   int s = 0;
-  for(int i = 0; i < nSeeds; i++){
+  for (int i = 0; i < nSeeds; i++) {
     int r = nSeeds - i - 1;
-
     s = matrix[r][s].ptr;
     offset = matrix[r][s].offset;
-
     swapOptCandidates[i].startSite = optCandidates[i*gramLen + s + offset].startSite;
     swapOptCandidates[i].endSite = optCandidates[i*gramLen + s + offset].endSite;
     swapOptCandidates[i].hashValue = optCandidates[i*gramLen + s + offset].hashValue;
     swapOptCandidates[i].locationsNum = optCandidates[i*gramLen + s + offset].locationsNum;
     *totalCandidatesNum += swapOptCandidates[i].locationsNum;
     // prefixLists.push_back(ListIterWrapper(i*gramLen + s, i*gramLen + s + offset, invertedLists));
-
     s += offset;
   }
 
@@ -167,11 +148,9 @@ void generate_optimal_prefix_qgram_for_variable_length_seeding_new(uint32_t read
   //        }
 }
 
-
-
-void generate_optimal_prefix_qgram_for_group_seeding(int kmerSize,int readLen, gCandidate *kmerCandidates, gCandidate *swapKmerCandidates, uint32_t *totalCandiNum) {
-  int row = edit_distance + 1 + additional_gram_num + 1;
-  int col = readLen - (edit_distance + 1 + additional_gram_num) * kmerSize + 1 + 1;
+void generate_optimal_prefix_qgram_for_group_seeding(int kmerSize, int read_length, gCandidate *kmerCandidates, gCandidate *swapKmerCandidates, uint32_t *totalCandiNum) {
+  int row = error_threshold + 1 + num_additional_qgrams + 1;
+  int col = read_length - (error_threshold + 1 + num_additional_qgrams) * kmerSize + 1 + 1;
   int M[row][col];
   int direction[row][col];
   for (int i = 1; i < row; ++i) {
@@ -214,10 +193,9 @@ void generate_optimal_prefix_qgram_for_group_seeding(int kmerSize,int readLen, g
   }
 }
 
-
-void generate_optimal_prefix_qgram_for_variable_length_seeding(int kmerSize,int readLen, vlCandidate *kmerCandidates, vlCandidate *swapKmerCandidates, uint32_t *totalCandiNum) {
-  int row = edit_distance + 1 + additional_gram_num + 1;
-  int col = readLen - (edit_distance + 1 + additional_gram_num) * kmerSize + 1 + 1;
+void generate_optimal_prefix_qgram_for_variable_length_seeding(int kmerSize, int read_length, vlCandidate *kmerCandidates, vlCandidate *swapKmerCandidates, uint32_t *totalCandiNum) {
+  int row = error_threshold + 1 + num_additional_qgrams + 1;
+  int col = read_length - (error_threshold + 1 + num_additional_qgrams) * kmerSize + 1 + 1;
   int M[row][col];
   int direction[row][col];
   for (int i = 1; i < row; ++i) {
@@ -247,9 +225,9 @@ void generate_optimal_prefix_qgram_for_variable_length_seeding(int kmerSize,int 
   int j = col - 1;
   while (1) {
     if (direction[i][j] == 2) {
-      swapKmerCandidates[edit_distance + additional_gram_num - count].startSite = kmerCandidates[j + (i - 1) * kmerSize - 1].startSite;
-      swapKmerCandidates[edit_distance + additional_gram_num - count].endSite = kmerCandidates[j + (i - 1) * kmerSize - 1].endSite;
-      swapKmerCandidates[edit_distance + additional_gram_num - count].locationsNum = kmerCandidates[j + (i - 1) * kmerSize - 1].locationsNum;
+      swapKmerCandidates[error_threshold + num_additional_qgrams - count].startSite = kmerCandidates[j + (i - 1) * kmerSize - 1].startSite;
+      swapKmerCandidates[error_threshold + num_additional_qgrams - count].endSite = kmerCandidates[j + (i - 1) * kmerSize - 1].endSite;
+      swapKmerCandidates[error_threshold + num_additional_qgrams - count].locationsNum = kmerCandidates[j + (i - 1) * kmerSize - 1].locationsNum;
       ++count;
       --i;
     } else if (direction[i][j] == 1) {
@@ -260,16 +238,14 @@ void generate_optimal_prefix_qgram_for_variable_length_seeding(int kmerSize,int 
   }
 }
 
-
-
-uint32_t generate_group_seeding_candidates(const Read *read, const int reverseComplemented, uint32_t **candidatesList,uint32_t **swapCandidatesList, uint32_t *candidatesNumMax, TwoTuple **candis, TwoTuple **tempCandis, uint32_t *tupleNum,uint32_t *candiNumWithoutAddFilter) {
+uint32_t generate_group_seeding_candidates(const Read *read, const int is_reverse_complement, uint32_t **candidates, uint32_t **swap_candidates, uint32_t *candidatesNumMax, TwoTuple **candis, TwoTuple **tempCandis, uint32_t *tupleNum, uint32_t *num_candidates_without_additonal_qgram_filter) {
   const uint8_t *bases = read->bases;
-  if (reverseComplemented == 1) {
+  if (is_reverse_complement == 1) {
     bases = read->rc_bases;
   }
 
   //dp for seed selection start
-  int scanSize = read->length - window_size + 1;
+  int scanSize = read->length - kmer_size + 1;
   uint32_t tempCandidateNums[scanSize];
   int tempHashValues[scanSize];
 
@@ -279,12 +255,12 @@ uint32_t generate_group_seeding_candidates(const Read *read, const int reverseCo
   int NNum = 0;
   for (int ri = 0; ri < scanSize; ++ri) {
     if (Nflag == 1) {
-      hashVal = hashValue(bases + ri, window_size);
+      hashVal = hashValue(bases + ri, kmer_size);
     } else {
-      int nextBase = (int) bases[ri + window_size - 1];
+      int nextBase = (int) bases[ri + kmer_size - 1];
       if (nextBase == 4) {
         ++NNum;
-        if (NNum > edit_distance) {
+        if (NNum > error_threshold) {
           return 0;
         }
         hashVal = -1;
@@ -303,23 +279,23 @@ uint32_t generate_group_seeding_candidates(const Read *read, const int reverseCo
     }
   }
 
-  int coveredNum = window_size/step_size;
-  if(window_size%step_size>0){
+  int coveredNum = kmer_size/step_size;
+  if(kmer_size%step_size>0){
     coveredNum++;
   }
 
-  int minTotalSubSeedNum = (read->length - window_size + 1 - step_size)/step_size;
-  if (coveredNum * (edit_distance + 1 +additional_gram_num) > minTotalSubSeedNum) {
+  int minTotalSubSeedNum = (read->length - kmer_size + 1 - step_size)/step_size;
+  if (coveredNum * (error_threshold + 1 +num_additional_qgrams) > minTotalSubSeedNum) {
     return 0;
   }
 
   uint32_t totalCandidatesCount = 0;
-  *candiNumWithoutAddFilter=0;
+  *num_candidates_without_additonal_qgram_filter = 0;
   uint32_t count = 0;
   for(int si=0;si<step_size;++si){
-    int totalSubSeedNum = (read->length - window_size + 1 - si)/step_size;
+    int totalSubSeedNum = (read->length - kmer_size + 1 - si)/step_size;
     gCandidate optCandidates[totalSubSeedNum];
-    gCandidate swapOptCandidates[edit_distance + 1 + additional_gram_num];
+    gCandidate swapOptCandidates[error_threshold + 1 + num_additional_qgrams];
     for(int k=0;k<totalSubSeedNum;++k){
       optCandidates[k].site = k*step_size + si; 
       optCandidates[k].hashValue = tempHashValues[si+k*step_size];
@@ -332,8 +308,8 @@ uint32_t generate_group_seeding_candidates(const Read *read, const int reverseCo
 
     totalCandidatesCount += totalPositionNum;
 
-    *candiNumWithoutAddFilter=totalCandidatesCount;
-    qsort(swapOptCandidates, edit_distance + 1 + additional_gram_num, sizeof(gCandidate), compare_gCandidate);
+    *num_candidates_without_additonal_qgram_filter = totalCandidatesCount;
+    qsort(swapOptCandidates, error_threshold + 1 + num_additional_qgrams, sizeof(gCandidate), compare_gCandidate);
     if (totalPositionNum > *tupleNum) {
       *tupleNum = totalPositionNum + (V_CPU_WIDE - (totalPositionNum % V_CPU_WIDE));
       TwoTuple* t_candis = (TwoTuple*) realloc(*candis, sizeof(TwoTuple) * (*tupleNum));
@@ -352,20 +328,20 @@ uint32_t generate_group_seeding_candidates(const Read *read, const int reverseCo
       (*candis)[pi] = tmpPosCount;
     }
     uint32_t candiSize = locationNum;
-    for (int ki = 1; ki < edit_distance + 1 + additional_gram_num; ++ki) {
+    for (int ki = 1; ki < error_threshold + 1 + num_additional_qgrams; ++ki) {
       locations = occurrence_table + lookup_table[swapOptCandidates[ki].hashValue];
       locationNum = swapOptCandidates[ki].locationsNum;
 
       uint32_t tempIndex = 0;
       uint32_t ci = 0;
       uint32_t j = 0;
-      int additionalPrefix = ki - edit_distance;
+      int additionalPrefix = ki - error_threshold;
 
       while (ci < candiSize) {
         uint32_t location = locations[j] - swapOptCandidates[ki].site;
 
         int detel = (*candis)[ci].a - location;
-        if (j < locationNum && detel >edit_distance) {
+        if (j < locationNum && detel >error_threshold) {
           /*if this is dealing with the last one,
            ** then there is no need to do this.*/
           if (additionalPrefix <= 0) {
@@ -375,8 +351,8 @@ uint32_t generate_group_seeding_candidates(const Read *read, const int reverseCo
             (*tempCandis)[tempIndex++] = tmpPosCount;
           }
           ++j;
-        } else if (j == locationNum || (-detel) > edit_distance) {
-          if (additionalPrefix <= 0 || (*candis)[ci].b > additional_gram_num) {
+        } else if (j == locationNum || (-detel) > error_threshold) {
+          if (additionalPrefix <= 0 || (*candis)[ci].b > num_additional_qgrams) {
             (*tempCandis)[tempIndex++] = (*candis)[ci];
           }
           ++ci;
@@ -422,15 +398,15 @@ uint32_t generate_group_seeding_candidates(const Read *read, const int reverseCo
     /* we have to initialize maxCandiNum with a constant before we use this function.
      ** I think maybe 4096 is OK.*/
     for (uint32_t i = 0; i < candiSize; ++i) {
-      if ((*candis)[i].b > additional_gram_num) {
-        if ((*candis)[i].a >= (uint32_t)edit_distance) {
-          uint32_t location = (*candis)[i].a - edit_distance;
-          (*candidatesList)[count++] = location;
+      if ((*candis)[i].b > num_additional_qgrams) {
+        if ((*candis)[i].a >= (uint32_t)error_threshold) {
+          uint32_t location = (*candis)[i].a - error_threshold;
+          (*candidates)[count++] = location;
           if (count >= *candidatesNumMax) {
             *candidatesNumMax= count * 2;
-            uint32_t *t_candidates = (uint32_t*) realloc(*candidatesList, sizeof(uint32_t) * count * 2);
+            uint32_t *t_candidates = (uint32_t*) realloc(*candidates, sizeof(uint32_t) * count * 2);
             assert(t_candidates);
-            *candidatesList = t_candidates;
+            *candidates = t_candidates;
           }
         }
       }
@@ -440,17 +416,17 @@ uint32_t generate_group_seeding_candidates(const Read *read, const int reverseCo
   return count;
 }
 
-uint32_t generate_variable_length_seeding_candidates(const Read *read, const int reverseComplemented, uint32_t **candidatesList,uint32_t **swapCandidatesList, uint32_t *candidatesNumMax, TwoTuple **candis, TwoTuple **tempCandis, uint32_t *tupleNum,uint32_t *candiNumWithoutAddFilter) {
+uint32_t generate_variable_length_seeding_candidates(const Read *read, const int is_reverse_complement, uint32_t **candidates, uint32_t **swap_candidates, uint32_t *candidatesNumMax, TwoTuple **candis, TwoTuple **tempCandis, uint32_t *tupleNum, uint32_t *num_candidates_without_additonal_qgram_filter) {
   const uint8_t *bases = read->bases;
-  if (reverseComplemented == 1) {
+  if (is_reverse_complement == 1) {
     bases = read->rc_bases;
   }
 
   //dp for seed selection start
-  int seedLengthMin = window_size + step_size - 1;
-  int scanSize = read->length - window_size + 1;
+  int seedLengthMin = kmer_size + step_size - 1;
+  int scanSize = read->length - kmer_size + 1;
 
-  if (seedLengthMin * (edit_distance + 1 + additional_gram_num) > read->length) {
+  if (seedLengthMin * (error_threshold + 1 + num_additional_qgrams) > read->length) {
     return 0;
   }
 
@@ -463,12 +439,12 @@ uint32_t generate_variable_length_seeding_candidates(const Read *read, const int
   int NNum = 0;
   for (int ri = 0; ri < scanSize; ++ri) {
     if (Nflag == 1) {
-      hashVal = hashValue(bases + ri, window_size);
+      hashVal = hashValue(bases + ri, kmer_size);
     } else {
-      int nextBase = (int) bases[ri + window_size - 1];
+      int nextBase = (int) bases[ri + kmer_size - 1];
       if (nextBase == 4) {
         ++NNum;
-        if (NNum > edit_distance) {
+        if (NNum > error_threshold) {
           return 0;
         }
         hashVal = -1;
@@ -487,11 +463,11 @@ uint32_t generate_variable_length_seeding_candidates(const Read *read, const int
     }
   }
   vlCandidate optCandidates[scanSize];
-  vlCandidate swapOptCandidates[edit_distance+additional_gram_num+1];
+  vlCandidate swapOptCandidates[error_threshold+num_additional_qgrams+1];
 
   uint32_t estimatedLocationNum[scanSize];
   memset(estimatedLocationNum,0,sizeof(int)*scanSize);
-  for(int i=0;i<read->length-window_size+1-step_size+1;++i){
+  for(int i=0;i<read->length-kmer_size+1-step_size+1;++i){
     estimatedLocationNum[i]=tempCandidateNums[i];
     for(int j=1;j<step_size;++j){
       estimatedLocationNum[i]+=tempCandidateNums[i+j];
@@ -510,10 +486,9 @@ uint32_t generate_variable_length_seeding_candidates(const Read *read, const int
     return 0;
   }
 
-
   swapOptCandidates[0].startSite = 0;
-  swapOptCandidates[edit_distance + additional_gram_num].endSite = read->length - 1;
-  for (int ki = 1; ki < edit_distance + 1 + additional_gram_num; ++ki){
+  swapOptCandidates[error_threshold + num_additional_qgrams].endSite = read->length - 1;
+  for (int ki = 1; ki < error_threshold + 1 + num_additional_qgrams; ++ki){
     if(swapOptCandidates[ki].locationsNum>=swapOptCandidates[ki-1].locationsNum){
       swapOptCandidates[ki].startSite = swapOptCandidates[ki - 1].endSite + 1;
     }else{
@@ -521,20 +496,19 @@ uint32_t generate_variable_length_seeding_candidates(const Read *read, const int
     }
   }
 
-
   uint32_t totalCandidatesCount = 0;
-  *candiNumWithoutAddFilter=0;
-  int totalKmerNum=(edit_distance+1+additional_gram_num)*(step_size);
+  *num_candidates_without_additonal_qgram_filter = 0;
+  int totalKmerNum=(error_threshold+1+num_additional_qgrams)*(step_size);
   SubSeed minSubSeeds[totalKmerNum];
-  int seedNum = edit_distance+1+additional_gram_num;
-  for(int ei=0; ei<edit_distance+1+additional_gram_num; ++ei){
+  int seedNum = error_threshold+1+num_additional_qgrams;
+  for(int ei=0; ei<error_threshold+1+num_additional_qgrams; ++ei){
     for(int si=0;si<step_size;++si){
       minSubSeeds[ei*step_size+si].site=swapOptCandidates[ei].startSite+si;
       minSubSeeds[ei*step_size+si].locationNum=tempCandidateNums[minSubSeeds[ei*step_size+si].site];
     }
     int seedLength = swapOptCandidates[ei].endSite - swapOptCandidates[ei].startSite + 1;
     int endIndex = step_size-1;
-    for(int sj=step_size;sj<seedLength-window_size+1;++sj){
+    for(int sj=step_size;sj<seedLength-kmer_size+1;++sj){
       int index = sj%step_size;
       if(tempCandidateNums[swapOptCandidates[ei].startSite + sj]<(uint32_t)minSubSeeds[ei*step_size+index].locationNum){
         minSubSeeds[ei*step_size+index].site=swapOptCandidates[ei].startSite + sj;
@@ -542,10 +516,9 @@ uint32_t generate_variable_length_seeding_candidates(const Read *read, const int
         endIndex=sj;
       }
     }
-
     if(step_size>1){
-      if(endIndex>step_size -1 && ei<edit_distance+additional_gram_num){
-        swapOptCandidates[ei+1].startSite = swapOptCandidates[ei].startSite + endIndex+ window_size;
+      if(endIndex>step_size -1 && ei<error_threshold+num_additional_qgrams){
+        swapOptCandidates[ei+1].startSite = swapOptCandidates[ei].startSite + endIndex+ kmer_size;
       }
     }
     for(int sk=0;sk<step_size;++sk){
@@ -553,7 +526,7 @@ uint32_t generate_variable_length_seeding_candidates(const Read *read, const int
     }
   }
 
-  *candiNumWithoutAddFilter=totalCandidatesCount;
+  *num_candidates_without_additonal_qgram_filter = totalCandidatesCount;
   if (totalCandidatesCount > *tupleNum) {
     *tupleNum = totalCandidatesCount + (V_CPU_WIDE - (totalCandidatesCount % V_CPU_WIDE));
     TwoTuple* t_candis = (TwoTuple*) realloc(*candis, sizeof(TwoTuple) * (*tupleNum));
@@ -565,7 +538,7 @@ uint32_t generate_variable_length_seeding_candidates(const Read *read, const int
   }
 
   uint32_t candiSize = 0;
-  qsort(minSubSeeds, (edit_distance+additional_gram_num+1)*step_size, sizeof(SubSeed), compare_sub_seed);
+  qsort(minSubSeeds, (error_threshold+num_additional_qgrams+1)*step_size, sizeof(SubSeed), compare_sub_seed);
   uint32_t locationNum = minSubSeeds[0].locationNum;
   uint32_t *locations=occurrence_table + lookup_table[tempHashValues[minSubSeeds[0].site]];
   for(uint32_t i=0;i<locationNum;++i){
@@ -581,20 +554,19 @@ uint32_t generate_variable_length_seeding_candidates(const Read *read, const int
       if(ei==0&&si==0){
         continue;
       }
-
       locationNum = minSubSeeds[ei*step_size+si].locationNum;
       locations =  occurrence_table + lookup_table[tempHashValues[minSubSeeds[ei*step_size+si].site]];
 
       uint32_t tempIndex = 0;
       uint32_t ci = 0;
       uint32_t j = 0;
-      int additionalPrefix =  ei * step_size+si- ((edit_distance+1+additional_gram_num) * step_size );
+      int additionalPrefix =  ei * step_size+si- ((error_threshold+1+num_additional_qgrams) * step_size );
 
       while (ci < candiSize) {
         uint32_t location = locations[j] - minSubSeeds[ei*step_size+si].site;
         //__builtin_prefetch((const void*) (locations + ((ci + 2))), 0, 0);
         int detel = (*candis)[ci].a - location;
-        if (j < locationNum && detel >edit_distance) {
+        if (j < locationNum && detel >error_threshold) {
           /*if this is dealing with the last one,
            ** then there is no need to do this.*/
           if (additionalPrefix <= 0) {
@@ -604,8 +576,8 @@ uint32_t generate_variable_length_seeding_candidates(const Read *read, const int
             (*tempCandis)[tempIndex++] = tmpPosCount;
           }
           ++j;
-        } else if (j == locationNum || (-detel) > edit_distance) {
-          if (additionalPrefix <= 0 || (*candis)[ci].b > additional_gram_num) {
+        } else if (j == locationNum || (-detel) > error_threshold) {
+          if (additionalPrefix <= 0 || (*candis)[ci].b > num_additional_qgrams) {
             (*tempCandis)[tempIndex++] = (*candis)[ci];
           }
           ++ci;
@@ -653,15 +625,15 @@ uint32_t generate_variable_length_seeding_candidates(const Read *read, const int
    ** I think maybe 4096 is OK.*/
   uint32_t count = 0;
   for (uint32_t i = 0; i < candiSize; ++i) {
-    if ((*candis)[i].b > additional_gram_num) {
-      if ((*candis)[i].a >= (uint32_t)edit_distance&& (*candis)[i].a<reference.lookupTable[reference.refNum] ) {
-        uint32_t location = (*candis)[i].a - edit_distance;
-        (*candidatesList)[count++] = location;
+    if ((*candis)[i].b > num_additional_qgrams) {
+      if ((*candis)[i].a >= (uint32_t)error_threshold&& (*candis)[i].a<reference.lookupTable[reference.refNum] ) {
+        uint32_t location = (*candis)[i].a - error_threshold;
+        (*candidates)[count++] = location;
         if (count >= *candidatesNumMax) {
           *candidatesNumMax= count * 2;
-          uint32_t *t_candidates = (uint32_t*) realloc(*candidatesList, sizeof(uint32_t) * count * 2);
+          uint32_t *t_candidates = (uint32_t*) realloc(*candidates, sizeof(uint32_t) * count * 2);
           assert(t_candidates);
-          *candidatesList = t_candidates;
+          *candidates = t_candidates;
         }
       }
     }

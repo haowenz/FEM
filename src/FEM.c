@@ -4,44 +4,47 @@
 #include "FEM-index.h"
 #include "utils.h"
 
-#define PACKAGE_VERSION "0.1"
+#define FEM_VERSION "0.1"
 
-static int print_usage() {
+static inline void print_usage() {
   fprintf(stderr, "\n");
   fprintf(stderr, "Program: FEM (Fast and Efficient short read Mapper)\n");
-  fprintf(stderr, "Version: %s\n", PACKAGE_VERSION);
+  fprintf(stderr, "Version: %s\n", FEM_VERSION);
   fprintf(stderr, "Contact: Haowen Zhang <hwzhang@gatech.edu>\n\n");
   fprintf(stderr, "Usage:   FEM <command> [options]\n\n");
   fprintf(stderr, "Command: index         index sequences in the FASTA format\n");
   fprintf(stderr, "         align         FEM algorithm\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "Note: To use FEM, you need to first index the genome with `FEM index'.\n\n");
-  return 1;
 }
 
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
-    return print_usage();
+    fprintf(stderr, "%s\n", "Too few arguements.");
+    print_usage();
+    exit(EXIT_FAILURE);
   }
 
-  int ret;
-  double t_real = get_real_time();
+  int return_value = 0;
+  double real_start_time = get_real_time();
+  double cpu_start_time = get_cpu_time();
   if (strcmp(argv[1], "index") == 0) {
-    ret = index_main(argc - 1, argv + 1);
+    return_value = index_main(argc - 1, argv + 1);
   } else if (strcmp(argv[1], "align") == 0) {
-    ret = align_main(argc - 1, argv + 1);
+    return_value = align_main(argc - 1, argv + 1);
   } else {
-    fprintf(stderr, "[main] unrecognized command '%s'\n", argv[1]);
-    return 1;
+    fprintf(stderr, "[%s] unrecognized command '%s'\n", __func__, argv[1]);
+    exit(EXIT_FAILURE);
   }
 
-  if (ret == 0) {
-    fprintf(stderr, "[%s] Version: %s\n", __func__, PACKAGE_VERSION);
+  if (return_value == 0) {
+    fprintf(stderr, "[%s] Version: %s\n", __func__, FEM_VERSION);
     fprintf(stderr, "[%s] CMD:", __func__);
-    for (int i = 0; i < argc; ++i)
+    for (int i = 0; i < argc; ++i) {
       fprintf(stderr, " %s", argv[i]);
-    fprintf(stderr, "\n[%s] Real time: %.3f sec; CPU: %.3f sec\n", __func__, get_real_time() - t_real, get_cpu_time());
+    }
+    fprintf(stderr, "\n[%s] Real time: %.3f sec; CPU: %.3f sec\n", __func__, get_real_time() - real_start_time, get_cpu_time() - cpu_start_time);
   }
-  return ret;
+  return return_value;
 }

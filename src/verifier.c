@@ -31,73 +31,73 @@ inline void permute(__m128i *patterns) {
   }
 }
 
-int verify_candidates(const Read *read, const int rc, const uint32_t *candidates, const uint32_t candiNum, int *noLeftResult, uint32_t *resultLen, char** resultStr) {
+int verify_candidates(const Read *read, const int is_reverse_complement, const uint32_t *candidates, const uint32_t num_candidates, int *no_left_result, uint32_t *result_string_length, char **result_string) {
   const uint8_t *text = read->bases;
-  if (rc == 1) {
+  if (is_reverse_complement == 1) {
     text = read->rc_bases;
   }
-  int mappingNum = 0;
+  int num_mappings = 0;
 
-  uint32_t regNum = candiNum / V_CPU;
-  uint32_t remains = candiNum % V_CPU;
+  uint32_t num_registers = num_candidates / V_CPU;
+  uint32_t remains = num_candidates % V_CPU;
   if (remains != 0) {
-    ++regNum;
+    ++num_registers;
   }
 
   char cigar[READ_LEN_MAX * 2];
   char MD[READ_LEN_MAX * 2];
   int16_t locations[V_CPU]; 
   int16_t errs[V_CPU];
-  uint32_t lastLocation = 0xffffffff;
-  for (uint32_t regIndex = 0; regIndex < regNum; ++regIndex) {
-    vectorized_banded_edit_distance(regIndex, text, read->length, candidates, candiNum, errs, locations);
+  uint32_t last_location = 0xffffffff;
+  for (uint32_t register_index = 0; register_index < num_registers; ++register_index) {
+    vectorized_banded_edit_distance(register_index, text, read->length, candidates, num_candidates, errs, locations);
     for (int mi = 0; mi < V_CPU; ++mi) {
-      if (regIndex * V_CPU + mi >= candiNum) {
+      if (register_index * V_CPU + mi >= num_candidates) {
         break;
       }
-      if ((int) errs[mi] <= edit_distance) {
-        uint8_t *pattern = reference.bases + candidates[regIndex * V_CPU + mi];
+      if ((int) errs[mi] <= error_threshold) {
+        uint8_t *pattern = reference.bases + candidates[register_index * V_CPU + mi];
         locations[mi] = (int16_t) generate_alignment(pattern, text, (int) locations[mi], cigar, read->length);
-        uint32_t location = candidates[regIndex * V_CPU + mi] + (uint32_t) locations[mi] + 1;
-        if (lastLocation == 0xffffffff) {
-          lastLocation = location;
-        } else if (location == lastLocation) {
+        uint32_t location = candidates[register_index * V_CPU + mi] + (uint32_t) locations[mi] + 1;
+        if (last_location == 0xffffffff) {
+          last_location = location;
+        } else if (location == last_location) {
           continue;
         } else {
-          lastLocation = location;
+          last_location = location;
         }
         generate_MD_tag(pattern, text, (int) locations[mi], cigar, MD);
 
         int secondary = 0;
-        if (mappingNum > 0) {
+        if (num_mappings > 0) {
           secondary = 1;
         }
-        for(int refIndex=0;refIndex<reference.refNum;++refIndex){
-          if(location<reference.lookupTable[refIndex+1]){
-            append_result_string(refIndex,read, rc, secondary, location, cigar, (int) errs[mi], MD, resultLen, resultStr);
+        for(int reference_index = 0; reference_index < reference.refNum; ++reference_index){
+          if (location < reference.lookupTable[reference_index + 1]) {
+            append_result_string(reference_index, read, is_reverse_complement, secondary, location, cigar, (int) errs[mi], MD, result_string_length, result_string);
             break;
           }
         }
-        *noLeftResult = 0;
-        ++mappingNum;
+        *no_left_result = 0;
+        ++num_mappings;
       }
     }
   }
 
-  if ((*noLeftResult) == 0 && push_output_queue(*resultStr)) {
-    *noLeftResult = 1;
-    *resultLen = 4096;
-    *resultStr = NULL;
-    *resultStr = (char*) calloc((*resultLen), sizeof(char));
+  if ((*no_left_result) == 0 && push_output_queue(*result_string)) {
+    *no_left_result = 1;
+    *result_string_length = 4096;
+    *result_string = NULL;
+    *result_string = (char*) calloc((*result_string_length), sizeof(char));
   }
 
-  return mappingNum;
+  return num_mappings;
 }
 
-int banded_edit_distance(const uint8_t* pattern, const uint8_t *text, int *location, const int readLen) {
-  int refLen = readLen + 2 * edit_distance;
-  int band_down = 2 * edit_distance;
-  int band_length = 2 * edit_distance + 1;
+int banded_edit_distance(const uint8_t* pattern, const uint8_t *text, int *location, const int read_length) {
+  int reference_length = read_length + 2 * error_threshold;
+  int band_down = 2 * error_threshold;
+  int band_length = 2 * error_threshold + 1;
 
   uint32_t Peq[ALPHABET_SIZE];
 
@@ -123,21 +123,19 @@ int banded_edit_distance(const uint8_t* pattern, const uint8_t *text, int *locat
 
   uint32_t err_mask = (uint32_t) 1;
   int i_bd = band_down;
-  int last_high = band_length - readLen + refLen - band_down - 1;
-  for (int i = 0; i < readLen; i++) {
-
+  int last_high = band_length - read_length + reference_length - band_down - 1;
+  for (int i = 0; i < read_length; i++) {
     X = Peq[text[i]] | VN;
     D0 = ((VP + (X & VP)) ^ VP) | X;
     HN = VP & D0;
     HP = VN | ~(VP | D0);
-
     X = D0 >> 1;
     VN = X & HP;
     VP = HN | ~(X | HP);
     if (!(D0 & err_mask)) {
       ++err;
-      if ((err - last_high) > edit_distance)
-        return edit_distance + 1;
+      if ((err - last_high) > error_threshold)
+        return error_threshold + 1;
     }
 
     for (int ai = 0; ai < ALPHABET_SIZE; ai++) {
@@ -148,11 +146,11 @@ int banded_edit_distance(const uint8_t* pattern, const uint8_t *text, int *locat
     Peq[pattern[i_bd]] = Peq[pattern[i_bd]] | Mask;
   }
 
-  int site = refLen - last_high - 1;
+  int site = reference_length - last_high - 1;
 
   *location = -1;
-  int error = edit_distance + 1;
-  if ((err <= edit_distance) && (err < error)) {
+  int error = error_threshold + 1;
+  if ((err <= error_threshold) && (err < error)) {
     error = err;
     *location = site;
   }
@@ -160,8 +158,7 @@ int banded_edit_distance(const uint8_t* pattern, const uint8_t *text, int *locat
   for (int i = 0; i < last_high; i++) {
     err = err + ((VP >> i) & (uint32_t) 1);
     err = err - ((VN >> i) & (uint32_t) 1);
-
-    if ((err <= edit_distance) && (err < error)) {
+    if ((err <= error_threshold) && (err < error)) {
       error = err;
       *location = site + i + 1;
     }
@@ -172,9 +169,9 @@ int banded_edit_distance(const uint8_t* pattern, const uint8_t *text, int *locat
 
 //#pragma GCC push_options
 //#pragma GCC optimize ("unroll-loops")
-void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* text, const int readLen, const uint32_t *candidates, const uint32_t candiNum,int16_t *errors, int16_t *locations) {
-  int refLen = readLen + 2 * edit_distance;
-  int band_length = 2 * edit_distance + 1;
+void vectorized_banded_edit_distance(const uint32_t register_index, const uint8_t *text, const int read_length, const uint32_t *candidates, const uint32_t num_candidates, int16_t *errors, int16_t *locations) {
+  int reference_length = read_length + 2 * error_threshold;
+  int band_length = 2 * error_threshold + 1;
   int bandLenMask = 0;
   //1 on least significant bits
   for (int i = 0; i < band_length; ++i) {
@@ -188,13 +185,13 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
   __m128i patterns[V_CPU];
   //#pragma unroll (V_CPU)
   //for (int pi = 0; pi < V_CPU; ++pi) {
-  //	if (regIndex * V_CPU + pi >= candiNum) {
+  //	if (register_index * V_CPU + pi >= num_candidates) {
   //			patterns[pi] = _mm_set1_epi8(4);
   //		} else {
   //			patterns[pi] =
   //					_mm_loadu_si128(
   //							(__m128i *) (refs[refIndex].bases
-  //									+ candidates[regIndex * V_CPU + pi]));
+  //									+ candidates[register_index * V_CPU + pi]));
   //		}
   //		__m128i result;
   //		int tmp = 0;
@@ -208,10 +205,10 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
   //		}
   //	}
 
-  if (regIndex * V_CPU + 0 >= candiNum) {
+  if (register_index * V_CPU + 0 >= num_candidates) {
     patterns[0] = _mm_set1_epi8(4);
   } else {    
-    patterns[0] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[regIndex * V_CPU + 0]));
+    patterns[0] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[register_index * V_CPU + 0]));
   }
   __m128i result;
   int tmp = 0;
@@ -223,10 +220,10 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
     Peq[ai] = _mm_insert_epi16(Peq[ai], tmp, 0);
   }
 
-  if (regIndex * V_CPU + 1 >= candiNum) {
+  if (register_index * V_CPU + 1 >= num_candidates) {
     patterns[1] = _mm_set1_epi8(4);
   } else {                                   
-    patterns[1] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[regIndex * V_CPU + 1]));
+    patterns[1] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[register_index * V_CPU + 1]));
   }                                                    
   for (int ai = 0; ai < ALPHABET_SIZE - 1; ++ai) {
     __m128i letter = _mm_set1_epi8((uint8_t) ai);
@@ -236,11 +233,10 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
     Peq[ai] = _mm_insert_epi16(Peq[ai], tmp, 1);
   }
 
-
-  if (regIndex * V_CPU + 2 >= candiNum) {
+  if (register_index * V_CPU + 2 >= num_candidates) {
     patterns[2] = _mm_set1_epi8(4);
   } else {                                   
-    patterns[2] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[regIndex * V_CPU + 2]));
+    patterns[2] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[register_index * V_CPU + 2]));
   }                                                    
   for (int ai = 0; ai < ALPHABET_SIZE - 1; ++ai) {
     __m128i letter = _mm_set1_epi8((uint8_t) ai);
@@ -250,11 +246,10 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
     Peq[ai] = _mm_insert_epi16(Peq[ai], tmp, 2);
   }
 
-
-  if (regIndex * V_CPU + 3 >= candiNum) {
+  if (register_index * V_CPU + 3 >= num_candidates) {
     patterns[3] = _mm_set1_epi8(4);
   } else {                                   
-    patterns[3] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[regIndex * V_CPU + 3]));
+    patterns[3] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[register_index * V_CPU + 3]));
   }                                                    
   for (int ai = 0; ai < ALPHABET_SIZE - 1; ++ai) {
     __m128i letter = _mm_set1_epi8((uint8_t) ai);
@@ -264,11 +259,10 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
     Peq[ai] = _mm_insert_epi16(Peq[ai], tmp, 3);
   }
 
-
-  if (regIndex * V_CPU + 4 >= candiNum) {
+  if (register_index * V_CPU + 4 >= num_candidates) {
     patterns[4] = _mm_set1_epi8(4);
   } else {                                   
-    patterns[4] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[regIndex * V_CPU + 4]));
+    patterns[4] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[register_index * V_CPU + 4]));
   }                                                    
   for (int ai = 0; ai < ALPHABET_SIZE - 1; ++ai) {
     __m128i letter = _mm_set1_epi8((uint8_t) ai);
@@ -278,11 +272,10 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
     Peq[ai] = _mm_insert_epi16(Peq[ai], tmp, 4);
   }
 
-
-  if (regIndex * V_CPU + 5 >= candiNum) {
+  if (register_index * V_CPU + 5 >= num_candidates) {
     patterns[5] = _mm_set1_epi8(4);
   } else {                                   
-    patterns[5] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[regIndex * V_CPU + 5]));
+    patterns[5] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[register_index * V_CPU + 5]));
   }                                                    
   for (int ai = 0; ai < ALPHABET_SIZE - 1; ++ai) {
     __m128i letter = _mm_set1_epi8((uint8_t) ai);
@@ -292,11 +285,10 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
     Peq[ai] = _mm_insert_epi16(Peq[ai], tmp, 5);
   }
 
-
-  if (regIndex * V_CPU + 6 >= candiNum) {
+  if (register_index * V_CPU + 6 >= num_candidates) {
     patterns[6] = _mm_set1_epi8(4);
   } else {                                   
-    patterns[6] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[regIndex * V_CPU + 6]));
+    patterns[6] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[register_index * V_CPU + 6]));
   }                                                    
   for (int ai = 0; ai < ALPHABET_SIZE - 1; ++ai) {
     __m128i letter = _mm_set1_epi8((uint8_t) ai);
@@ -307,10 +299,10 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
   }
 
 
-  if (regIndex * V_CPU + 7 >= candiNum) {
+  if (register_index * V_CPU + 7 >= num_candidates) {
     patterns[7] = _mm_set1_epi8(4);
   } else {                                   
-    patterns[7] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[regIndex * V_CPU + 7]));
+    patterns[7] =  _mm_loadu_si128( (__m128i *) (reference.bases + candidates[register_index * V_CPU + 7]));
   }                                                    
   for (int ai = 0; ai < ALPHABET_SIZE - 1; ++ai) {
     __m128i letter = _mm_set1_epi8((uint8_t) ai);
@@ -319,8 +311,6 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
     tmp &= bandLenMask;                                      
     Peq[ai] = _mm_insert_epi16(Peq[ai], tmp, 7);
   }
-
-
 
   //a0,a1,a2...a7,a8,a9...->a0,b0,c0...a1,b1,c1...
   permute(patterns);
@@ -335,10 +325,10 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
   __m128i maxMask = _mm_set1_epi16(0xffff);
   __m128i errMask = _mm_set1_epi16(1);
   __m128i errs = _mm_set1_epi16(0);
-  int i_bd = 2 * edit_distance;
-  int last_high = 2 * edit_distance;
-  __m128i threshold = _mm_set1_epi16(edit_distance * 3);
-  for (int i = 0; i < readLen; i++) {
+  int i_bd = 2 * error_threshold;
+  int last_high = 2 * error_threshold;
+  __m128i threshold = _mm_set1_epi16(error_threshold * 3);
+  for (int i = 0; i < read_length; i++) {
     X = _mm_or_si128(Peq[text[i]], VN);
     D0 = _mm_and_si128(X, VP);
     D0 = _mm_add_epi16(D0, VP);
@@ -366,10 +356,10 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
     if (i_bd % 16 == 0) {
       //#pragma unroll (V_CPU)
       for (int pi = 0; pi < V_CPU; ++pi) {
-        if (regIndex * V_CPU + pi >= candiNum) {
+        if (register_index * V_CPU + pi >= num_candidates) {
           patterns[pi] = _mm_set1_epi8(4);
         } else {
-          patterns[pi] = _mm_loadu_si128( (__m128i *) (reference.bases + candidates[regIndex * V_CPU + pi] + i_bd));
+          patterns[pi] = _mm_loadu_si128( (__m128i *) (reference.bases + candidates[register_index * V_CPU + pi] + i_bd));
         }
       }
       permute(patterns);
@@ -388,11 +378,11 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
       Peq[ai] = _mm_or_si128(Peq[ai], mask);
     }
   }
-  int site = refLen - last_high - 1;
+  int site = reference_length - last_high - 1;
   __m128i tmpLocs = _mm_set1_epi16(site);
-  __m128i tmpErrs = _mm_set1_epi16(edit_distance + 1);
+  __m128i tmpErrs = _mm_set1_epi16(error_threshold + 1);
   tmpErrs = _mm_min_epu16(tmpErrs, errs);
-  threshold = _mm_set1_epi16(edit_distance + 1);
+  threshold = _mm_set1_epi16(error_threshold + 1);
   for (int i = 0; i < last_high; i++) {
     __m128i tmpVP = _mm_and_si128(VP, errMask);
     __m128i tmpVN = _mm_and_si128(VN, errMask);
@@ -444,22 +434,22 @@ void vectorized_banded_edit_distance(const uint32_t regIndex, const uint8_t* tex
 }
 //#pragma GCC pop_options
 
-int generate_alignment(const uint8_t* pattern, const uint8_t* text, int match_site, char* cigar, const int readLen) {
-  int refLen = readLen + 2 * edit_distance;
-  int band_down = 2 * edit_distance;
-  int band_length = 2 * edit_distance + 1;
+int generate_alignment(const uint8_t *pattern, const uint8_t *text, int match_site, char *cigar, const int read_length) {
+  int reference_length = read_length + 2 * error_threshold;
+  int band_down = 2 * error_threshold;
+  int band_length = 2 * error_threshold + 1;
 
   cigar[0] = 0;
 
-  int start_location = match_site - readLen + 1;
+  int start_location = match_site - read_length + 1;
   int tmp_err = 0;
 
-  for (int i = 0; i < readLen; i++)
+  for (int i = 0; i < read_length; i++)
     if (text[i] != pattern[i + start_location])
       tmp_err++;
 
-  if (tmp_err == edit_distance) {
-    sprintf(cigar + strlen(cigar), "%d%c", readLen, 'M');
+  if (tmp_err == error_threshold) {
+    sprintf(cigar + strlen(cigar), "%d%c", read_length, 'M');
     return start_location;
   }
 
@@ -488,12 +478,12 @@ int generate_alignment(const uint8_t* pattern, const uint8_t* text, int match_si
 
   int j = 0;
   int i_bd = band_down;
-  int last_high = band_length - readLen + refLen - band_down - 1;
+  int last_high = band_length - read_length + reference_length - band_down - 1;
 
   uint32_t tmp_D0 = 0;
   uint32_t tmp_HP = 0;
   int i = 0;
-  for (i = 0; i < readLen; i++) {
+  for (i = 0; i < read_length; i++) {
     X = Peq[text[i]] | VN;
     tmp_D0 = ((VP + (X & VP)) ^ VP) | X;
     HN = VP & tmp_D0;
@@ -509,16 +499,16 @@ int generate_alignment(const uint8_t* pattern, const uint8_t* text, int match_si
     }
 
     ++i_bd;
-    if ((i_bd) < refLen)
+    if ((i_bd) < reference_length)
       Peq[pattern[i_bd]] = Peq[pattern[i_bd]] | Mask;
   }
 
-  int site = refLen - last_high - 1;
+  int site = reference_length - last_high - 1;
   int search_site = match_site - site;
   int pre_size = 1;
   char pre_char = 'N';
   uint32_t Mask_1 = (uint32_t) 1;
-  i = readLen - 1;
+  i = read_length - 1;
   int sum_err = 0;
 
   j = 1;
@@ -554,7 +544,7 @@ int generate_alignment(const uint8_t* pattern, const uint8_t* text, int match_si
   }
 
   while (i >= 0) {
-    if (sum_err == edit_distance)
+    if (sum_err == error_threshold)
       break;
 
     if (((D0_arry_64[i] >> search_site) & Mask_1)
@@ -628,106 +618,102 @@ int generate_alignment(const uint8_t* pattern, const uint8_t* text, int match_si
       j++;
       sprintf(cigar + strlen(cigar), "%d%c", size_SM, 'M');
     } else
-      sprintf(cigar + strlen(cigar), "%d%c", Route_Size_Whole[j],
-          Route_Char_Whole[j]);
+      sprintf(cigar + strlen(cigar), "%d%c", Route_Size_Whole[j], Route_Char_Whole[j]);
   }
 
   return start_location;
-
 }
 
-void generate_MD_tag(const uint8_t* pattern, const uint8_t* text, int startLocation, char* cigar, char* NM) {
-  NM[0] = '\0';
-  int cigarLen = strlen(cigar);
-  char num[READ_LEN_MAX];
-  int numIndex = 0;
-  int matchNum = 0;
+void generate_MD_tag(const uint8_t *pattern, const uint8_t *text, int start_location, char *cigar, char *MD) {
+  MD[0] = '\0';
+  int cigar_length = strlen(cigar);
+  char num_operations_string[READ_LEN_MAX];
+  int num_operation_digit_index = 0;
+  int num_matches = 0;
   const uint8_t *read = text;
-  const uint8_t *reference = pattern + startLocation;
-  int readIndex = 0;
-  int refIndex = 0;
+  const uint8_t *reference = pattern + start_location;
+  int read_index = 0;
+  int reference_index = 0;
 
-  for (int ci = 0; ci < cigarLen; ci++) {
+  for (int ci = 0; ci < cigar_length; ci++) {
     char c = cigar[ci];
     if (c >= '0' && c <= '9') {
-      num[numIndex++] = c;
+      num_operations_string[num_operation_digit_index++] = c;
     } else {
-      num[numIndex] = '\0';
-      int opNum = atoi(num);
+      num_operations_string[num_operation_digit_index] = '\0';
+      int num_operations = atoi(num_operations_string);
       if (c == 'M') {
-        for (int opi = 0; opi < opNum; opi++) {
-          if (reference[refIndex] != read[readIndex]) {
+        for (int opi = 0; opi < num_operations; opi++) {
+          if (reference[reference_index] != read[read_index]) {
             //a mismatch
-            if (matchNum != 0) {
-              sprintf(NM + strlen(NM), "%d", matchNum);
-              matchNum = 0;
+            if (num_matches != 0) {
+              sprintf(MD + strlen(MD), "%d", num_matches);
+              num_matches = 0;
             }
-            switch (reference[refIndex]) {
+            switch (reference[reference_index]) {
               case 0:
-                sprintf(NM + strlen(NM), "%c", 'A');
+                sprintf(MD + strlen(MD), "%c", 'A');
                 break;
               case 1:
-                sprintf(NM + strlen(NM), "%c", 'C');
+                sprintf(MD + strlen(MD), "%c", 'C');
                 break;
               case 2:
-                sprintf(NM + strlen(NM), "%c", 'G');
+                sprintf(MD + strlen(MD), "%c", 'G');
                 break;
               case 3:
-                sprintf(NM + strlen(NM), "%c", 'T');
+                sprintf(MD + strlen(MD), "%c", 'T');
                 break;
             }
           } else {
-            ++matchNum;
+            ++num_matches;
           }
-          ++refIndex;
-          ++readIndex;
+          ++reference_index;
+          ++read_index;
         }
       } else if (c == 'I') {
-        //matchNum += opNum;
-        readIndex += opNum;
+        //matchNum += num_operations;
+        read_index += num_operations;
       } else if (c == 'D') {
-        if (matchNum != 0) {
-          sprintf(NM + strlen(NM), "%d", matchNum);
-          matchNum = 0;
+        if (num_matches != 0) {
+          sprintf(MD + strlen(MD), "%d", num_matches);
+          num_matches = 0;
         }
-        sprintf(NM + strlen(NM), "%c", '^');
-        for (int opi = 0; opi < opNum; opi++) {
-          switch (reference[refIndex]) {
+        sprintf(MD + strlen(MD), "%c", '^');
+        for (int opi = 0; opi < num_operations; opi++) {
+          switch (reference[reference_index]) {
             case 0:
-              sprintf(NM + strlen(NM), "%c", 'A');
+              sprintf(MD + strlen(MD), "%c", 'A');
               break;
             case 1:
-              sprintf(NM + strlen(NM), "%c", 'C');
+              sprintf(MD + strlen(MD), "%c", 'C');
               break;
             case 2:
-              sprintf(NM + strlen(NM), "%c", 'G');
+              sprintf(MD + strlen(MD), "%c", 'G');
               break;
             case 3:
-              sprintf(NM + strlen(NM), "%c", 'T');
+              sprintf(MD + strlen(MD), "%c", 'T');
               break;
           }
-          refIndex++;
+          reference_index++;
         }
       }
-      numIndex = 0;
+      num_operation_digit_index = 0;
     }
   }
-  if (matchNum != 0) {
-    sprintf(NM + strlen(NM), "%d", matchNum);
-    matchNum = 0;
+  if (num_matches != 0) {
+    sprintf(MD + strlen(MD), "%d", num_matches);
+    num_matches = 0;
   }
 }
 
-void append_result_string(const int refIndex,const Read *read, const int rc, const int secondary,
-    const int location, const char* cigar, const int err, const char* MD,
-    uint32_t *resultStrLen, char** resultStr) {
+void append_result_string(const int reference_index, const Read *read, const int is_reverse_complement, const int secondary, const int location, const char *cigar, const int err, const char *MD, uint32_t *result_string_length, char **result_string) {
   char result[1000];
   result[0] = '\0';
   strcpy(result, read->name);
-  int flag = rc * READ_REVERSE_MAPPED + secondary * NOT_PRIMARY_ALIGN;
+  int flag = is_reverse_complement * READ_REVERSE_MAPPED + secondary * NOT_PRIMARY_ALIGN;
   sprintf(result + strlen(result), "\t%d\t", flag);
-  strcpy(result + strlen(result), reference.names[refIndex]);
-  sprintf(result + strlen(result), "\t%d\t%d\t", location-reference.lookupTable[refIndex], 255);
+  strcpy(result + strlen(result), reference.names[reference_index]);
+  sprintf(result + strlen(result), "\t%d\t%d\t", location - reference.lookupTable[reference_index], 255);
   strcpy(result + strlen(result), cigar);
   strcpy(result + strlen(result), "\t*\t0\t0\t");
   if (secondary == 0) {
@@ -738,13 +724,13 @@ void append_result_string(const int refIndex,const Read *read, const int rc, con
   sprintf(result + strlen(result), "\t*\tNM:i:%d\tMD:Z:", err);
   strcpy(result + strlen(result), MD);
   strcpy(result + strlen(result), "\n");
-  if ((strlen(*resultStr) + strlen(result)) >= *resultStrLen) {
-    (*resultStrLen) *= 2;
-    char *temp = (char*) realloc(*resultStr, sizeof(char) * (*resultStrLen));
+  if ((strlen(*result_string) + strlen(result)) >= *result_string_length) {
+    (*result_string_length) *= 2;
+    char *temp = (char*) realloc(*result_string, sizeof(char) * (*result_string_length));
     assert(temp);
-    *resultStr = temp;
+    *result_string = temp;
   }
-  strcpy((*resultStr) + strlen((*resultStr)), result);
+  strcpy((*result_string) + strlen((*result_string)), result);
 }
 
 //uint8_t reverseComplementInt8(uint8_t base) {

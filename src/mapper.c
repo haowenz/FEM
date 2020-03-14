@@ -1,21 +1,20 @@
 #include "mapper.h"
 
-int window_size;
+int kmer_size;
 int step_size;
-int edit_distance;
-int additional_gram_num;
-int cpu_thread_num;
-int finished_thread_num;
-int cpu_thread_num_per_group;
+int error_threshold;
+int num_additional_qgrams;
+int num_threads;
+int num_finished_threads;
+int num_threads_per_group;
 
-uint32_t candidate_num_without_add_filter[256];
-uint32_t mapped_read_num[256];
-uint32_t candidate_num[256];
-uint32_t mapping_num[256];
-uint32_t read_count[256];
+uint32_t num_candidates_without_filter[256];
+uint32_t num_mapped_reads[256];
+uint32_t num_candidates[256];
+uint32_t num_mappings[256];
+uint32_t num_reads[256];
 
-uint32_t (*novelCandidateGenerator)(const Read *read, const int rc, uint32_t **candidates,uint32_t **swapCandidates,uint32_t *maxCandiNum,TwoTuple **candis, TwoTuple **tempCandis, uint32_t *tupleNum,uint32_t *candiNumWithoutAddFilter);
-
+uint32_t (*generate_candidates)(const Read *read, const int is_reverse_complement, uint32_t **candidates, uint32_t **swap_candidates, uint32_t *max_num_candidates, TwoTuple **candis, TwoTuple **temp_candis, uint32_t *num_tuples, uint32_t *num_candidates_without_additonal_qgram_filter);
 
 void initialize_mapper() {
   initialize_ref(&reference);
@@ -36,80 +35,80 @@ void finalize_mapper() {
   finalize_output_file();
 }
 
-int CPU_map(int threadID) {
+int CPU_map(int thread_id) {
   uint32_t mappingNum = 0;
-  uint32_t localCandiNum = 0;
-  uint32_t totalCandidateNum = 0;
-  uint32_t candiNumWithoutAddFilter = 0;
-  uint32_t totalCandidateNumWithoutAddFilter = 0;
-  int noLeftResult = 0;
-  uint32_t readCount = 0;
-  uint32_t mappedReadCount = 0;
-  uint32_t maxCandiNum = 4096;
-  uint32_t tupleNum = 4096;
-  uint32_t resultStrLen = 4096;
-  uint32_t *candidates = (uint32_t*) calloc(maxCandiNum, sizeof(uint32_t));
-  uint32_t *swapCandidates = (uint32_t*) calloc(maxCandiNum, sizeof(uint32_t));
-  TwoTuple *candis = (TwoTuple*) calloc(tupleNum, sizeof(TwoTuple));
-  TwoTuple *tempCandis = (TwoTuple*) calloc(tupleNum, sizeof(TwoTuple));
-  char *resultStr = (char*) calloc(resultStrLen, sizeof(char));
+  uint32_t tmp_num_candidates = 0;
+  uint32_t total_num_candidates = 0;
+  uint32_t tmp_num_candidates_without_additional_qgram_filter = 0;
+  uint32_t total_num_candidates_without_additional_qgram_filter = 0;
+  int no_left_result = 0;
+  uint32_t tmp_num_reads = 0;
+  uint32_t tmp_num_mapped_reads = 0;
+  uint32_t max_num_candidates = 4096;
+  uint32_t num_tuples = 4096;
+  uint32_t result_string_length = 4096;
+  uint32_t *candidates = (uint32_t*) calloc(max_num_candidates, sizeof(uint32_t));
+  uint32_t *swap_candidates = (uint32_t*) calloc(max_num_candidates, sizeof(uint32_t));
+  TwoTuple *candis = (TwoTuple*) calloc(num_tuples, sizeof(TwoTuple));
+  TwoTuple *tmp_candis = (TwoTuple*) calloc(num_tuples, sizeof(TwoTuple));
+  char *result_string = (char*) calloc(result_string_length, sizeof(char));
   Read read;
 
   while (pop_read_queue(&read) != -1) {
-    readCount++;
+    tmp_num_reads++;
     int tmpMappedReadNum = 0;
-    localCandiNum = novelCandidateGenerator(&read, 0, &candidates, &swapCandidates, &maxCandiNum, &candis, &tempCandis, &tupleNum, &candiNumWithoutAddFilter);
-    totalCandidateNumWithoutAddFilter += candiNumWithoutAddFilter;
+    tmp_num_candidates = generate_candidates(&read, 0, &candidates, &swap_candidates, &max_num_candidates, &candis, &tmp_candis, &num_tuples, &tmp_num_candidates_without_additional_qgram_filter);
+    total_num_candidates_without_additional_qgram_filter += tmp_num_candidates_without_additional_qgram_filter;
 
-    if (localCandiNum > 0) {
-      totalCandidateNum += localCandiNum;
-      tmpMappedReadNum += verify_candidates(&read, 0, candidates, localCandiNum, &noLeftResult, &resultStrLen, &resultStr);
+    if (tmp_num_candidates > 0) {
+      total_num_candidates += tmp_num_candidates;
+      tmpMappedReadNum += verify_candidates(&read, 0, candidates, tmp_num_candidates, &no_left_result, &result_string_length, &result_string);
     }
 
-    localCandiNum = novelCandidateGenerator(&read, 1, &candidates,&swapCandidates, &maxCandiNum,&candis,&tempCandis,&tupleNum ,&candiNumWithoutAddFilter);
-    totalCandidateNumWithoutAddFilter += candiNumWithoutAddFilter;
+    tmp_num_candidates = generate_candidates(&read, 1, &candidates, &swap_candidates, &max_num_candidates, &candis, &tmp_candis, &num_tuples, &tmp_num_candidates_without_additional_qgram_filter);
+    total_num_candidates_without_additional_qgram_filter += tmp_num_candidates_without_additional_qgram_filter;
 
-    if (localCandiNum > 0) {
-      totalCandidateNum += localCandiNum;
-      tmpMappedReadNum += verify_candidates(&read, 1, candidates, localCandiNum, &noLeftResult, &resultStrLen, &resultStr);
+    if (tmp_num_candidates > 0) {
+      total_num_candidates += tmp_num_candidates;
+      tmpMappedReadNum += verify_candidates(&read, 1, candidates, tmp_num_candidates, &no_left_result, &result_string_length, &result_string);
     }
 
-    if(tmpMappedReadNum>0) {
+    if (tmpMappedReadNum>0) {
       mappingNum += tmpMappedReadNum; 
-      mappedReadCount++;
+      tmp_num_mapped_reads++;
     }
   }
 
-  //fprintf(stderr, "Thread %d is pushing local results to output queue...\n", threadID);
+  //fprintf(stderr, "Thread %d is pushing local results to output queue...\n", thread_id);
 
-  while (noLeftResult != 1) {
-    if (push_output_queue(resultStr)) {
-      noLeftResult = 1;
-      //free(resultStr);
-      resultStr = NULL;
+  while (no_left_result != 1) {
+    if (push_output_queue(result_string)) {
+      no_left_result = 1;
+      //free(result_string);
+      result_string = NULL;
     }
   }
 
-  //fprintf(stderr, "Thread %d pushed local results to output queue successfully.\n", threadID);
+  //fprintf(stderr, "Thread %d pushed local results to output queue successfully.\n", thread_id);
 
   free(candidates);
-  free(swapCandidates);
+  free(swap_candidates);
   free(candis);
-  free(tempCandis);
-  candidate_num_without_add_filter[threadID] = totalCandidateNumWithoutAddFilter;
-  candidate_num[threadID] = totalCandidateNum;
-  mapping_num[threadID] = mappingNum;
-  read_count[threadID] = readCount;
-  mapped_read_num[threadID] = mappedReadCount;
-  fprintf(stderr, "Thread %d completed.\n", threadID);
+  free(tmp_candis);
+  num_candidates_without_filter[thread_id] = total_num_candidates_without_additional_qgram_filter;
+  num_candidates[thread_id] = total_num_candidates;
+  num_mappings[thread_id] = mappingNum;
+  num_reads[thread_id] = tmp_num_reads;
+  num_mapped_reads[thread_id] = tmp_num_mapped_reads;
+  fprintf(stderr, "Thread %d completed.\n", thread_id);
 
   return mappingNum;
 }
 
 
 void *start_CPU_thread(void *arg) {
-  int threadID = *((int*) arg);
-  CPU_map(threadID);
+  int thread_id = *((int*) arg);
+  CPU_map(thread_id);
   return NULL;
 }
 

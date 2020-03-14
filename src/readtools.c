@@ -4,14 +4,14 @@
 KSEQ_INIT(int, read)
 __UTILS_CHAR_UINT8
 
-FILE *read_seq_fp1;
-FILE *read_seq_fp2;
-char *read_file_name1;
-char *read_file_name2;
-kseq_t *read_seq1;
-kseq_t *read_seq2;
-pthread_mutex_t readMutex1;
-pthread_mutex_t readMutex2;
+FILE *read1_file;
+FILE *read2_file;
+char *read1_file_path;
+char *read2_file_path;
+kseq_t *read1_kseq;
+kseq_t *read2_kseq;
+pthread_mutex_t read1_mutex;
+pthread_mutex_t read2_mutex;
 pthread_mutex_t read_queue_mutex;
 pthread_cond_t read_queue_pro_cond;
 pthread_cond_t read_queue_cos_cond;
@@ -112,32 +112,32 @@ void single_read_queue_thread() {
   //fprintf(stderr, "Broadcast!\n");
 }
 
-void initialize_ReadBlock(ReadBlock *readBlock) {
-  readBlock->num = 0;
-  readBlock->length = -1;
-  readBlock->bases = NULL;
-  readBlock->rc_bases = NULL;
-  readBlock->names = (char*) malloc(sizeof(char) * READ_NAME_LEN_MAX * READBLOCK_NUM_MAX);
-  assert(readBlock->names);
+void initialize_ReadBlock(ReadBlock *read_block) {
+  read_block->num = 0;
+  read_block->length = -1;
+  read_block->bases = NULL;
+  read_block->rc_bases = NULL;
+  read_block->names = (char*) malloc(sizeof(char) * READ_NAME_LEN_MAX * READBLOCK_NUM_MAX);
+  assert(read_block->names);
 }
 
 void reset_read_file() {
   /*single-end mode*/
-  rewind(read_seq_fp1);
-  read_seq1 = kseq_init(fileno(read_seq_fp1));
+  rewind(read1_file);
+  read1_kseq = kseq_init(fileno(read1_file));
 }
 
 void initialize_read_file() {
   /*single-end mode*/
   //readMutex1= PTHREAD_MUTEX_INITIALIZER;
-  pthread_mutex_init(&readMutex1, NULL);
+  pthread_mutex_init(&read1_mutex, NULL);
 
-  read_seq_fp1 = fopen(read_file_name1, "r");
-  if (read_seq_fp1 == NULL) {
-    fprintf(stderr, "Cannnot open read file: %s.\n", read_file_name1);
-    exit(-1);
+  read1_file = fopen(read1_file_path, "r");
+  if (read1_file == NULL) {
+    fprintf(stderr, "Cannnot open read file: %s.\n", read1_file_path);
+    exit(EXIT_FAILURE);
   } else {
-    read_seq1 = kseq_init(fileno(read_seq_fp1));
+    read1_kseq = kseq_init(fileno(read1_file));
   }
   /*pair-end mode*/
   //eadMutex2= PTHREAD_MUTEX_INITIALIZER;
@@ -145,26 +145,26 @@ void initialize_read_file() {
 
 void finalize_read_file() {
   /*single-end mode*/
-  kseq_destroy(read_seq1);
-  fclose(read_seq_fp1);
+  kseq_destroy(read1_kseq);
+  fclose(read1_file);
   /*pair-end mode*/
 }
 
 int get_single_read(Read *read) {
-  int l = kseq_read(read_seq1);
+  int l = kseq_read(read1_kseq);
   while (l == 0) {
-    l = kseq_read(read_seq1);
+    l = kseq_read(read1_kseq);
     printf("!");
   }
   if (l > 0) {
     read->length = l;
     memset(read->name, '\0', sizeof(char) * READ_NAME_LEN_MAX);
     memset(read->charBases, '\0', sizeof(char) * READ_LEN_MAX);
-    strcpy(read->name, read_seq1->name.s);
-    strcpy(read->charBases, read_seq1->seq.s);
+    strcpy(read->name, read1_kseq->name.s);
+    strcpy(read->charBases, read1_kseq->seq.s);
     int i;
     for (i = 0; i < l; ++i) {
-      char c = read_seq1->seq.s[i];
+      char c = read1_kseq->seq.s[i];
       uint8_t base = charToUint8(c);
       read->bases[i] = base;
       if (base != 4) {
@@ -187,75 +187,69 @@ int get_single_read(Read *read) {
   return 0;
 }
 
-int get_ReadBlock(ReadBlock *readBlock) {
-  int flag = pthread_mutex_trylock(&readMutex1);
+int get_ReadBlock(ReadBlock *read_block) {
+  int flag = pthread_mutex_trylock(&read1_mutex);
   if (flag != 0) {
     return 0;
   }
-  memset(readBlock->names, '\0',
-      sizeof(char) * READBLOCK_NUM_MAX * READ_NAME_LEN_MAX);
+  memset(read_block->names, '\0', sizeof(char) * READBLOCK_NUM_MAX * READ_NAME_LEN_MAX);
   int count = 0;
   while (count < READBLOCK_NUM_MAX) {
-    int l = kseq_read(read_seq1);
+    int l = kseq_read(read1_kseq);
     while (l == 0) {
-      l = kseq_read(read_seq1);
+      l = kseq_read(read1_kseq);
     }
     if (l > 0) {
       if (count == 0) {
-        if (l != readBlock->length) {
-          readBlock->length = l;
-          if (readBlock->bases != NULL) {
-            _mm_free(readBlock->bases);
+        if (l != read_block->length) {
+          read_block->length = l;
+          if (read_block->bases != NULL) {
+            _mm_free(read_block->bases);
           }
-          readBlock->bases = (uint8_t*) _mm_malloc(
-              sizeof(uint8_t) * l * READBLOCK_NUM_MAX, 16);
+          read_block->bases = (uint8_t*) _mm_malloc(sizeof(uint8_t) * l * READBLOCK_NUM_MAX, 16);
           printf("!!!!!!!!!!\n");
-          assert(readBlock->bases);
-          if (readBlock->rc_bases != NULL) {
-            _mm_free(readBlock->rc_bases);
+          assert(read_block->bases);
+          if (read_block->rc_bases != NULL) {
+            _mm_free(read_block->rc_bases);
           }
-          readBlock->rc_bases = (uint8_t*) _mm_malloc(
-              sizeof(uint8_t) * l * READBLOCK_NUM_MAX, 16);
-          assert(readBlock->rc_bases);
+          read_block->rc_bases = (uint8_t*) _mm_malloc(sizeof(uint8_t) * l * READBLOCK_NUM_MAX, 16);
+          assert(read_block->rc_bases);
         }
       } else {
         /*XAM will support variant length later*/
-        if (readBlock->length != l) {
+        if (read_block->length != l) {
           fprintf(stderr,"The length of reads is not equal.\n");
           exit(-1);
         }
-
       }
-      memcpy(readBlock->names + count * READ_NAME_LEN_MAX,
-          read_seq1->name.s, sizeof(uint8_t) * READ_NAME_LEN_MAX);
-      //			strcpy(readBlock->names + count * READ_NAME_LEN_MAX,
+      memcpy(read_block->names + count * READ_NAME_LEN_MAX, read1_kseq->name.s, sizeof(uint8_t) * READ_NAME_LEN_MAX);
+      //			strcpy(read_block->names + count * READ_NAME_LEN_MAX,
       //					read_seq1->name.s);
       int i;
       for (i = 0; i < l; ++i) {
-        char c = read_seq1->seq.s[i];
+        char c = read1_kseq->seq.s[i];
         uint8_t base = charToUint8(c);
-        readBlock->bases[count * l + i] = base;
+        read_block->bases[count * l + i] = base;
         if (base != 4) {
-          readBlock->rc_bases[count * l + l - 1 - i] = 3 - base;
+          read_block->rc_bases[count * l + l - 1 - i] = 3 - base;
         } else {
-          readBlock->rc_bases[count * l + l - 1 - i] = 4;
+          read_block->rc_bases[count * l + l - 1 - i] = 4;
         }
-
       }
       count++;
     } else if (l == -1) {
       /*end of file*/
-      readBlock->num = count;
-      pthread_mutex_unlock(&readMutex1);
+      read_block->num = count;
+      pthread_mutex_unlock(&read1_mutex);
       return -1;
     } else {
-      pthread_mutex_unlock(&readMutex1);
+      pthread_mutex_unlock(&read1_mutex);
       /* truncated quality string*/
       fprintf(stderr, "truncated quality string.");
-      exit(-1);
+      exit(EXIT_FAILURE);
     }
   }
-  readBlock->num = count;
-  pthread_mutex_unlock(&readMutex1);
+  read_block->num = count;
+  pthread_mutex_unlock(&read1_mutex);
   return 0;
 }

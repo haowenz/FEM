@@ -9,8 +9,8 @@
 
 #include <sys/queue.h>
 
-extern char *result_file_name;
-extern char *header_file_name;
+extern char *output_file_path;
+extern char *header_file_path;
 extern pthread_cond_t output_queue_pro_cond;
 
 enum SAMFlags {
@@ -28,13 +28,12 @@ enum SAMFlags {
   READ_PAIR_SECOND_FORWARD_MAPPED = 0,
   READ_PAIR_SECOND_REVERSE_MAPPED = 16,
   READ_PAIR_SECOND_UNMAPPED = 4,
-
   NOT_PRIMARY_ALIGN = 256
 };
 
-typedef struct {
-  char resultStr[1024];
-} OutputResult;
+//typedef struct {
+//  char resultStr[1024];
+//} OutputResult;
 
 void initialize_output_queue();
 void destroy_output_queue() ;

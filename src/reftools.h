@@ -17,13 +17,13 @@ typedef struct{
 } Reference;
 
 extern Reference reference;
-extern char *ref_file_name;
+extern char *reference_file_path;
 
-int count_kmer(Reference *ref, uint32_t hashValue, int kmerLength);
+int count_kmer(Reference *reference, uint32_t hash_value, int kmer_size);
 void initialize_ref_file();
 void finalize_ref_file();
-void initialize_ref(Reference *ref);
-int get_ref(Reference *ref);
-void destroy_ref(Reference *ref);
+void initialize_ref(Reference *reference);
+int get_ref(Reference *reference);
+void destroy_ref(Reference *reference);
 
 #endif /* REFTOOLS_H_ */

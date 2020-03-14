@@ -1,6 +1,6 @@
 #include "FEM-align.h"
 
-static int print_usage() {
+static inline void print_usage() {
   fprintf(stderr, "\n");
   fprintf(stderr, "Usage:   FEM align [options] \n\n");
   fprintf(stderr, "Options:");
@@ -16,35 +16,35 @@ static int print_usage() {
   fprintf(stderr, "         --read    STR    Input read file\n");
   fprintf(stderr, "         -o        STR    Output SAM file \n");
   fprintf(stderr, "\n");
-  return 1;
 }
 
-static int check_args() {
-  if(edit_distance<0 || edit_distance>7) {
-    printf("Wrong edit distance.\n");
+static inline int check_args() {
+  if (error_threshold < 0 || error_threshold > 7) {
+    fprintf(stderr, "%s\n", "Wrong error threshold.");
     return 0;
-  } else if(cpu_thread_num<=0) {
-    printf("Wrong number of threads.\n");
+  } else if (num_threads <= 0) {
+    fprintf(stderr, "%s\n", "Wrong number of threads.");
     return 0;
-  } else if(additional_gram_num<0||additional_gram_num>2) {
-    printf("The number of additional q-gram is too large");
+  } else if (num_additional_qgrams < 0 || num_additional_qgrams > 2) {
+    fprintf(stderr, "%s\n", "The number of additional q-gram is too large.");
     return 0;
-  } else if(!ref_file_name||!strcmp(ref_file_name,"")) {
-    printf("Reference file path is required.\n");
+  } else if (!reference_file_path || !strcmp(reference_file_path,"")) {
+    fprintf(stderr, "%s\n", "Reference file path is required.");
     return 0;
-  } else if(!read_file_name1||!strcmp(read_file_name1,"")) {
-    printf("Read file path is required.\n");
+  } else if (!read1_file_path || !strcmp(read1_file_path,"")) {
+    fprintf(stderr, "%s\n", "Read file path is required.");
     return 0;
-  } else if(!result_file_name||!strcmp(result_file_name,"")) {
-    printf("Output file path is required.\n");
+  } else if (!output_file_path || !strcmp(output_file_path,"")) {
+    fprintf(stderr, "%s\n", "Output file path is required.");
     return 0;
   } else {
-    printf("e: %d, t:%d, a: %d, ref: %s, read: %s, output: %s\n ", edit_distance, cpu_thread_num, additional_gram_num, ref_file_name, read_file_name1, result_file_name);
+    fprintf(stderr, "e: %d, t:%d, a: %d, ref: %s, read: %s, output: %s\n", error_threshold, num_threads, num_additional_qgrams, reference_file_path, read1_file_path, output_file_path);
     return 1;
   }
 }
 
 int align_main(int argc, char *argv[]) {
+  // Parse args
   const char *short_opt = "ahf:e:t:o:r:i:";
   struct option long_opt[] = 
   {
@@ -53,127 +53,128 @@ int align_main(int argc, char *argv[]) {
     {"read",required_argument, NULL,'i'}
   };
   int c, option_index;
-  additional_gram_num = 0;
-  cpu_thread_num = 1;
-  while((c = getopt_long(argc, argv, short_opt, long_opt, &option_index))>=0) {
+  num_additional_qgrams = 0;
+  num_threads = 1;
+  while((c = getopt_long(argc, argv, short_opt, long_opt, &option_index)) >= 0) {
     switch(c) {
       case 'r':
-        printf("name: %s, ref: %s\n",long_opt[option_index].name,optarg);
-        ref_file_name =optarg;
+        fprintf(stderr, "name: %s, ref: %s\n", long_opt[option_index].name, optarg);
+        reference_file_path = optarg;
         break;
       case 'i':
-        printf("name: %s, read: %s\n",long_opt[option_index].name, optarg);
-        read_file_name1= optarg;
+        fprintf(stderr, "name: %s, read: %s\n", long_opt[option_index].name, optarg);
+        read1_file_path = optarg;
         break;
       case 'e':
-        edit_distance = atoi(optarg);
+        error_threshold = atoi(optarg);
         break;
       case 't':
-        cpu_thread_num = atoi(optarg);
+        num_threads = atoi(optarg);
         break;
       case 'a':
-        additional_gram_num = 1;
+        num_additional_qgrams = 1;
         break;
       case 'f':
-        if(strcmp(optarg, "vl")==0)
-          novelCandidateGenerator = generate_variable_length_seeding_candidates;
-        else if(strcmp(optarg,"g")==0)
-          novelCandidateGenerator = generate_group_seeding_candidates;
-        else {
-          fprintf(stderr, "Wrong name of seeding algorithm!");
-          return print_usage();
+        if(strcmp(optarg, "vl") == 0) {
+          generate_candidates = generate_variable_length_seeding_candidates;
+        } else if(strcmp(optarg,"g") == 0) {
+          generate_candidates = generate_group_seeding_candidates;
+        } else {
+          fprintf(stderr, "%s\n", "Wrong name of seeding algorithm!");
+          print_usage();
+          exit(EXIT_FAILURE);
         }
         break;
       case 'o':
-        result_file_name = optarg;
+        output_file_path = optarg;
         break;
       default:
-        return print_usage();
+        print_usage();
+        exit(EXIT_SUCCESS);
     }
   }
 
+  // Check args
   if (!check_args()) {
-    return print_usage();
+    print_usage();
+    exit(EXIT_FAILURE);
   }
 
-  char tempIndexFileName[256];
-  strcpy(tempIndexFileName, ref_file_name);
-  sprintf(tempIndexFileName + strlen(tempIndexFileName), ".fem");
-  index_file_name =tempIndexFileName;
-  char tempHeaderFileName[256];
-  strcpy(tempHeaderFileName, tempIndexFileName);
-  sprintf(tempHeaderFileName + strlen(tempHeaderFileName), ".header");
-  header_file_name = tempHeaderFileName;
-  pthread_t CPUTaskHandle[cpu_thread_num];
-  pthread_t readQueueHandle;
-  pthread_t outputQueueHandle;
+  // Start mapping
+  char temp_index_file_path[256];
+  strcpy(temp_index_file_path, reference_file_path);
+  sprintf(temp_index_file_path + strlen(temp_index_file_path), ".fem");
+  index_file_path = temp_index_file_path;
+  char temp_header_file_path[256];
+  strcpy(temp_header_file_path, temp_index_file_path);
+  sprintf(temp_header_file_path + strlen(temp_header_file_path), ".header");
+  header_file_path = temp_header_file_path;
+  pthread_t thread_handles[num_threads];
+  pthread_t read_queue_thread_handle;
+  pthread_t output_queue_thread_handle;
   initialize_mapper();
   load_index();
 
   double startTime = get_real_time();
-  fprintf(stderr, "Window_size: %d, step_size: %d.\n", window_size, step_size);
-  finished_thread_num = 0;
-  int thread_id_array[cpu_thread_num];
-  for (int i = 0; i < cpu_thread_num; ++i) {
-    candidate_num[i] = 0;
-    candidate_num_without_add_filter[i] = 0;
-    mapping_num[i] = 0;
-    read_count[i] = 0;
-    mapped_read_num[i] = 0;
+  fprintf(stderr, "kmer size: %d, step size: %d.\n", kmer_size, step_size);
+  num_finished_threads = 0;
+  int thread_id_array[num_threads];
+  for (int i = 0; i < num_threads; ++i) {
+    num_candidates[i] = 0;
+    num_candidates_without_filter[i] = 0;
+    num_mappings[i] = 0;
+    num_reads[i] = 0;
+    num_mapped_reads[i] = 0;
     thread_id_array[i] = i;
   }
 
-  int err = 0;
-  err = pthread_create(&readQueueHandle, NULL, start_single_read_queue_thread, NULL);
-  if (err == 0) {
+  int pthread_err = 0;
+  pthread_err = pthread_create(&read_queue_thread_handle, NULL, start_single_read_queue_thread, NULL);
+  if (pthread_err == 0) {
     fprintf(stderr, "Created read queue successfully.\n");
   }
-  err = pthread_create(&outputQueueHandle, NULL, start_output_queue_thread, NULL);
-  if (err == 0) {
+  pthread_err = pthread_create(&output_queue_thread_handle, NULL, start_output_queue_thread, NULL);
+  if (pthread_err == 0) {
     fprintf(stderr, "Created output queue successfully.\n");
   }
-
-  for (int i = 0; i < cpu_thread_num; ++i) {
-    err = pthread_create(CPUTaskHandle + i, NULL, start_CPU_thread, thread_id_array + i);
+  for (int i = 0; i < num_threads; ++i) {
+    pthread_err = pthread_create(thread_handles + i, NULL, start_CPU_thread, thread_id_array + i);
   }
-
-  for (int i = 0; i < cpu_thread_num; ++i) {
-    err = pthread_join(CPUTaskHandle[i], NULL);
-    ++finished_thread_num;
+  for (int i = 0; i < num_threads; ++i) {
+    pthread_err = pthread_join(thread_handles[i], NULL);
+    ++num_finished_threads;
   }
-
-  pthread_cond_signal(&output_queue_pro_cond);
-  err = pthread_join(outputQueueHandle, NULL);
-  if (err == 0) {
+  pthread_err = pthread_cond_signal(&output_queue_pro_cond);
+  assert(pthread_err == 0);
+  pthread_err = pthread_join(output_queue_thread_handle, NULL);
+  if (pthread_err == 0) {
     fprintf(stderr, "Output queue thread joint successfully.\n");
   }
-
-  err = pthread_join(readQueueHandle, NULL);
-  if (err == 0) {
+  pthread_err = pthread_join(read_queue_thread_handle, NULL);
+  if (pthread_err == 0) {
     fprintf(stderr, "Read queue thread joint successfully.\n");
   }
 
-  uint32_t totalCandidateNum = 0;
-  uint32_t totalMappingNum = 0;
-  uint32_t totalReadNum=0;
-  uint32_t totalCanddidateNumWithoutFilter = 0;
-  uint32_t totalMappedReadNum =0;
-  for (int i = 0; i < cpu_thread_num; ++i) {
-    totalCandidateNum += candidate_num[i];
-    totalMappingNum += mapping_num[i];
-    totalCanddidateNumWithoutFilter += candidate_num_without_add_filter[i];
-    totalMappedReadNum += mapped_read_num[i];
-    totalReadNum += read_count[i];
+  // Generate mapping statistics
+  uint32_t total_num_reads = 0;
+  uint32_t total_num_mapped_reads =0;
+  uint32_t total_num_candidates_without_filter = 0;
+  uint32_t total_num_candidates = 0;
+  uint32_t total_num_mappings = 0;
+  for (int i = 0; i < num_threads; ++i) {
+    total_num_reads += num_reads[i];
+    total_num_mapped_reads += num_mapped_reads[i];
+    total_num_candidates_without_filter += num_candidates_without_filter[i];
+    total_num_candidates += num_candidates[i];
+    total_num_mappings += num_mappings[i];
   }
-
-  fprintf(stderr, "The number of read: %u.\n", totalReadNum);
-  fprintf(stderr, "The number of mapped read: %u.\n", totalMappedReadNum);
-  fprintf(stderr, "The number of candidate before additional q-gram filter: %u.\n", totalCanddidateNumWithoutFilter);
-  fprintf(stderr, "The number of candidate: %u.\n", totalCandidateNum);
-  fprintf(stderr, "The number of mapping: %u.\n", totalMappingNum);
+  fprintf(stderr, "The number of read: %u.\n", total_num_reads);
+  fprintf(stderr, "The number of mapped read: %u.\n", total_num_mapped_reads);
+  fprintf(stderr, "The number of candidate before additional q-gram filter: %u.\n", total_num_candidates_without_filter);
+  fprintf(stderr, "The number of candidate: %u.\n", total_num_candidates);
+  fprintf(stderr, "The number of mapping: %u.\n", total_num_mappings);
   fprintf(stderr, "Time: %fs.\n", get_real_time() - startTime);
 
   finalize_mapper();
-
   return 0;
 }

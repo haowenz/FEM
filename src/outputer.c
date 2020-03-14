@@ -1,10 +1,10 @@
 #include "outputer.h"
 
-FILE *result_file_fp;
-FILE *header_file_fp;
-char *result_file_name;
-char *header_file_name;
-pthread_mutex_t outputMutex;
+FILE *output_file;
+FILE *header_file;
+char *output_file_path;
+char *header_file_path;
+pthread_mutex_t output_mutex;
 pthread_mutex_t output_queue_mutex;
 pthread_cond_t output_queue_pro_cond;
 pthread_cond_t output_queue_cos_cond;
@@ -53,32 +53,32 @@ int push_output_queue(char* result) {
 }
 
 void output_queue_thread() {
-  while (finished_thread_num < cpu_thread_num) {
-    char *resultStr;
+  while (num_finished_threads < num_threads) {
+    char *result_string;
     pthread_mutex_lock(&output_queue_mutex);
     while (output_queue_size == 0) {
       pthread_cond_wait(&output_queue_pro_cond, &output_queue_mutex);
-      if (finished_thread_num == cpu_thread_num) {
+      if (num_finished_threads == num_threads) {
         pthread_mutex_unlock(&output_queue_mutex);
         break;
       }
     }
 
-    resultStr = output_queue[output_queue_front];
+    result_string = output_queue[output_queue_front];
     output_queue[output_queue_front] = NULL;
     output_queue_front = (output_queue_front + 1) % output_queue_size_max;
     --output_queue_size;
     pthread_mutex_unlock(&output_queue_mutex);
 
-    if (resultStr != NULL) {
-      fwrite(resultStr, sizeof(char), strlen(resultStr), result_file_fp);
-      free(resultStr);
-      resultStr = NULL;
+    if (result_string != NULL) {
+      fwrite(result_string, sizeof(char), strlen(result_string), output_file);
+      free(result_string);
+      result_string = NULL;
     }
   }
 
   while (output_queue_size > 0) {
-    fwrite(output_queue[output_queue_front], sizeof(char), strlen(output_queue[output_queue_front]), result_file_fp);
+    fwrite(output_queue[output_queue_front], sizeof(char), strlen(output_queue[output_queue_front]), output_file);
     free(output_queue[output_queue_front]);
     output_queue[output_queue_front] = NULL;
     output_queue_front = (output_queue_front + 1) % output_queue_size_max;
@@ -89,31 +89,31 @@ void output_queue_thread() {
 
 void initialize_output_file() {
   //outputMutex = PTHREAD_MUTEX_INITIALIZER;
-  pthread_mutex_init(&outputMutex, NULL);
-  result_file_fp = fopen(result_file_name, "w");
-  if (result_file_fp == NULL) {
+  pthread_mutex_init(&output_mutex, NULL);
+  output_file = fopen(output_file_path, "w");
+  if (output_file == NULL) {
     fprintf(stderr, "Cannot open output file.\n");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 }
 
 void output_header_from_index_file() {
-  int bufferSize = 4096;
-  char buffer[bufferSize];
-  header_file_fp = fopen(header_file_name, "r");
+  int buffer_size = 4096;
+  char buffer[buffer_size];
+  header_file = fopen(header_file_path, "r");
   int num = 0;
   do {
-    num = fread(buffer, sizeof(char), bufferSize, header_file_fp);
-    fwrite(buffer, sizeof(char), num, result_file_fp);
+    num = fread(buffer, sizeof(char), buffer_size, header_file);
+    fwrite(buffer, sizeof(char), num, output_file);
   } while (num > 0);
-  fclose(header_file_fp);
+  fclose(header_file);
 }
 
 int output_string(const char* result) {
-  int out = pthread_mutex_trylock(&outputMutex);
+  int out = pthread_mutex_trylock(&output_mutex);
   if (out == 0) {
-    fwrite(result, sizeof(char), strlen(result), result_file_fp);
-    pthread_mutex_unlock(&outputMutex);
+    fwrite(result, sizeof(char), strlen(result), output_file);
+    pthread_mutex_unlock(&output_mutex);
     return 1;
   } else {
     return 0;
@@ -121,5 +121,5 @@ int output_string(const char* result) {
 }
 
 void finalize_output_file() {
-  fclose(result_file_fp);
+  fclose(output_file);
 }

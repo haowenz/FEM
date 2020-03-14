@@ -5,57 +5,57 @@ __UTILS_CHAR_UINT8
 
 Reference reference;
 
-FILE *ref_seq_fp;
-char *ref_file_name;
-kseq_t *ref_seq;
+FILE *reference_file;
+char *reference_file_path;
+kseq_t *reference_kseq;
 
-void initialize_ref(Reference *ref) {
-  ref->refNum = 0;
-  ref->lookupTable[0]=0;
-  ref->bases = (uint8_t*) _mm_malloc(sizeof(uint8_t) * REF_LEN_MAX, 16);
-  assert(ref->bases);
+void initialize_ref(Reference *reference) {
+  reference->refNum = 0;
+  reference->lookupTable[0]=0;
+  reference->bases = (uint8_t*) _mm_malloc(sizeof(uint8_t) * REF_LEN_MAX, 16);
+  assert(reference->bases);
 }
 
-void destroy_ref(Reference *ref) {
-  if (ref->bases != NULL) {
-    _mm_free(ref->bases);
-    ref->bases = NULL;
+void destroy_ref(Reference *reference) {
+  if (reference->bases != NULL) {
+    _mm_free(reference->bases);
+    reference->bases = NULL;
   }
-  ref->refNum = 0;
+  reference->refNum = 0;
 }
 
 void initialize_ref_file() {
-  ref_seq_fp = fopen(ref_file_name, "r");
-  if (ref_seq_fp == NULL) {
-    fprintf(stderr, "Cannnot open read file: %s.\n", ref_file_name);
-    exit(-1);
+  reference_file = fopen(reference_file_path, "r");
+  if (reference_file == NULL) {
+    fprintf(stderr, "Cannnot open read file: %s.\n", reference_file_path);
+    exit(EXIT_FAILURE);
   } else {
-    ref_seq = kseq_init(fileno(ref_seq_fp));
+    reference_kseq = kseq_init(fileno(reference_file));
   }
 }
 
 void finalize_ref_file() {
-  kseq_destroy(ref_seq);
-  fclose(ref_seq_fp);
+  kseq_destroy(reference_kseq);
+  fclose(reference_file);
 }
 
-int get_ref(Reference *ref) {
-  int l = kseq_read(ref_seq);
+int get_ref(Reference *reference) {
+  int l = kseq_read(reference_kseq);
   while (l == 0) {
-    l = kseq_read(ref_seq);
+    l = kseq_read(reference_kseq);
   }
   while (l > 0) {
-    ref->refNum++;
-    ref->lookupTable[ref->refNum] = ref->lookupTable[ref->refNum-1]+l;
-    memset(ref->names[ref->refNum-1], '\0', sizeof(char) * REF_NAME_LEN_MAX);
-    strcpy(ref->names[ref->refNum-1], ref_seq->name.s);
+    reference->refNum++;
+    reference->lookupTable[reference->refNum] = reference->lookupTable[reference->refNum - 1] + l;
+    memset(reference->names[reference->refNum - 1], '\0', sizeof(char) * REF_NAME_LEN_MAX);
+    strcpy(reference->names[reference->refNum - 1], reference_kseq->name.s);
     uint32_t i;
-    for (i = ref->lookupTable[ref->refNum-1]; i < ref->lookupTable[ref->refNum-1]+l; ++i) {
-      char c = ref_seq->seq.s[i-ref->lookupTable[ref->refNum-1]];
-      ref->bases[i] = charToUint8(c);
+    for (i = reference->lookupTable[reference->refNum - 1]; i < reference->lookupTable[reference->refNum - 1] + l; ++i) {
+      char c = reference_kseq->seq.s[i-reference->lookupTable[reference->refNum - 1]];
+      reference->bases[i] = charToUint8(c);
     }
-    fprintf(stderr, "%s\n", ref->names[ref->refNum-1]);
-    l = kseq_read(ref_seq);
+    fprintf(stderr, "%s\n", reference->names[reference->refNum-1]);
+    l = kseq_read(reference_kseq);
   } 
   if (l == -1) {
     /*end of file*/
@@ -63,7 +63,7 @@ int get_ref(Reference *ref) {
   } else {
     /* truncated quality string*/
     fprintf(stderr, "truncated quality string.");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
   /*never come to here*/
   return 0;
