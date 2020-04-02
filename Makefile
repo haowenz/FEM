@@ -1,12 +1,12 @@
-c_source=utils.c readtools.c reftools.c indextools.c filter.c verifier.c outputer.c mapper.c FEM-align.c FEM-index.c FEM.c
+c_source=sequence_batch.c index.c filter.c align.c input_queue.c output_queue.c map.c FEM_map.c FEM_index.c FEM.c
 src_dir=src
 objs_dir=objs
 objs+=$(patsubst %.c,$(objs_dir)/%.o,$(c_source))
 
 cxx=gcc
-cxxflags=-Wall -O3 -march=native
+cxxflags=-g -Wall -O3 -march=native
 
-ldflags=-lpthread -lm
+ldflags=-lpthread -lm -lz
 exec=FEM
 
 all: dir $(exec) 
