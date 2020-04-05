@@ -9,10 +9,22 @@ cxxflags=-g -Wall -O3 -march=native
 ldflags=-lpthread -lm -lz
 exec=FEM
 
-all: dir $(exec) 
-	
-dir:
-	-mkdir -p $(objs_dir)
+.PHONY: all
+all: htslib mk_obj_dir $(exec) 
+
+.PHONY: htslib
+htslib:
+	git submodule update --init --recursive
+	cd extern/htslib;\
+	autoheader;\
+	autoconf;\
+	./configure --disable-bz2 --disable-lzma;\
+	make;\
+	make prefix=. install
+
+.PHONY: mk_obj_dir
+mk_obj_dir:
+	mkdir -p $(objs_dir)
 
 $(exec): $(objs)
 	$(cxx) $(cxxflags) $(objs) -o $(exec) $(ldflags)
@@ -22,4 +34,4 @@ $(objs_dir)/%.o: $(src_dir)/%.c
 
 .PHONY: clean
 clean:
-	-rm -r $(exec) $(objs_dir)
+	rm -rf $(exec) $(objs_dir)
