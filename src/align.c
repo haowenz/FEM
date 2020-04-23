@@ -1,6 +1,7 @@
 #include "align.h"
+#include "kstring.h"
 
-int verify_candidates(const FEMArgs *fem_args, const SequenceBatch *read_sequence_batch, size_t read_sequence_index, int is_reverse_complement, const SequenceBatch *reference_sequence_batch, const uint64_t *candidates, uint32_t num_candidates, kstring_t *result_kstring) {
+int verify_candidates(const FEMArgs *fem_args, OutputQueue *output_queue, const SequenceBatch *read_sequence_batch, uint32_t read_sequence_index, int is_reverse_complement, const SequenceBatch *reference_sequence_batch, const uint64_t *candidates, uint32_t num_candidates, bam1_t **sam_alignment) {
   //const uint8_t *text = read->bases;
   //if (is_reverse_complement == 1) {
   //  text = read->rc_bases;
@@ -12,12 +13,11 @@ int verify_candidates(const FEMArgs *fem_args, const SequenceBatch *read_sequenc
   int num_mappings = 0;
   uint32_t num_vpus = num_candidates / NUM_VPU_LANES;
   uint32_t num_remains = num_candidates % NUM_VPU_LANES;
-  //char cigar[read_length + 2 * fem_args->error_threshold];
-  //char MD[read_length + 2 * fem_args->error_threshold];
   int16_t mapping_edit_distances[NUM_VPU_LANES];
   int16_t mapping_end_positions[NUM_VPU_LANES]; 
-
   int64_t previous_mapping_end_position = -read_length;
+  kvec_t_uint32_t cigar_uint32_t;
+  kv_init(cigar_uint32_t.v);
   for (uint32_t vpu_index = 0; vpu_index < num_vpus; ++vpu_index) {
     for (int li = 0; li < NUM_VPU_LANES; ++li){
       mapping_end_positions[li] = read_length - 1;
@@ -25,6 +25,8 @@ int verify_candidates(const FEMArgs *fem_args, const SequenceBatch *read_sequenc
     vectorized_banded_edit_distance(fem_args, vpu_index, reference_sequence_batch, read_sequence, read_length, candidates, num_candidates, mapping_edit_distances, mapping_end_positions);
     for (int mi = 0; mi < NUM_VPU_LANES; ++mi) {
       if (mapping_edit_distances[mi] <= fem_args->error_threshold) {
+        //Mapping mapping = {read_sequence_index, mapping_edit_distance};
+        //kv_push(mappings_on_diff_ref[reference_sequence_index]);
         int64_t mapping_end_position = candidates[vpu_index * NUM_VPU_LANES + mi] + mapping_end_positions[mi] + 1;
         if (previous_mapping_end_position == -read_length) {
           previous_mapping_end_position = mapping_end_position;
@@ -33,6 +35,18 @@ int verify_candidates(const FEMArgs *fem_args, const SequenceBatch *read_sequenc
         } else {
           previous_mapping_end_position = mapping_end_position;
         }
+        int read_name_length = get_sequence_name_length_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
+        const char *read_name = get_sequence_name_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
+        const char *read_qual = get_sequence_qual_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
+        int32_t reference_sequence_index = candidates[vpu_index * NUM_VPU_LANES + mi] >> 32;
+        const char *reference_sequence = get_sequence_from_sequence_batch_at(reference_sequence_batch, reference_sequence_index) + (uint32_t)candidates[vpu_index * NUM_VPU_LANES + mi];
+        kv_clear(cigar_uint32_t.v);
+        int mapping_start_position = generate_alignment(fem_args, reference_sequence, read_sequence, read_length, mapping_edit_distances[mi], mapping_end_positions[mi], NULL, &cigar_uint32_t);
+        mapping_start_position += (int32_t)candidates[vpu_index * NUM_VPU_LANES + mi];
+        uint8_t mapping_quality = 255;
+        uint16_t flag = 0;
+        generate_bam1_t(mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, read_length, *sam_alignment);
+        //push_output_queue(sam_alignment, output_queue);
         ++num_mappings;
       }
     }
@@ -53,9 +67,23 @@ int verify_candidates(const FEMArgs *fem_args, const SequenceBatch *read_sequenc
       } else {
         previous_mapping_end_position = mapping_end_position;
       }
+      int read_name_length = get_sequence_name_length_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
+      const char *read_name = get_sequence_name_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
+      const char *read_qual = get_sequence_qual_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
+      //int32_t reference_sequence_index = candidates[vpu_index * NUM_VPU_LANES + mi] >> 32;
+      //const char *reference_sequence = get_sequence_from_sequence_batch_at(reference_sequence_batch, reference_sequence_index) + (uint32_t)candidates[vpu_index * NUM_VPU_LANES + mi];
+      kv_clear(cigar_uint32_t.v);
+      int mapping_start_position = generate_alignment(fem_args, reference_sequence, read_sequence, read_length, current_mapping_edit_distance, current_mapping_end_position, NULL, &cigar_uint32_t);
+      //mapping_start_position += (int32_t)candidates[vpu_index * NUM_VPU_LANES + mi];
+      mapping_start_position += (int32_t)candidate;
+      uint8_t mapping_quality = 255;
+      uint16_t flag = 0;
+      generate_bam1_t(mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, read_length, *sam_alignment);
+      //push_output_queue(sam_alignment, output_queue);
       ++num_mappings;
     }
   }
+  kv_destroy(cigar_uint32_t.v);
   return num_mappings;
 }
 
@@ -234,4 +262,319 @@ void vectorized_banded_edit_distance(const FEMArgs *fem_args, const uint32_t vpu
     VN = _mm_srli_epi16(VN, 1);
   }
   _mm_store_si128((__m128i *)mapping_edit_distances, min_num_errors_vpu);
+}
+
+int generate_alignment(const FEMArgs *fem_args, const char *pattern, const char *text, int read_length, int mapping_edit_distance, int mapping_end_position, kstring_t *cigar, kvec_t_uint32_t *cigar_uint32_t) {
+  // Note that we do a semi-global alignemnt, that is, errors at two ends of ref are not penalized and read is aligned globally
+  // Also note that cigar operations are on ref 
+  // M/I/S/=/X operations shall equal the length of SEQ
+  // When using ED, "ID" or "DI" won't happen
+
+  int mapping_start_position = mapping_end_position - read_length + 1;
+  assert(mapping_start_position >= 0);
+  int num_errors = 0;
+  // Check if there are only substitutions
+  for (int i = 0; i < read_length; i++) {
+    if (text[i] != pattern[mapping_start_position + i]) {
+      ++num_errors;
+    }
+  }
+  if (num_errors == mapping_edit_distance) {
+    //ksprintf(cigar, "%d%c", read_length, 'M');
+    uint32_t cigar_uint = read_length << 4;
+    kv_push(uint32_t, cigar_uint32_t->v, cigar_uint | 0);
+    return mapping_start_position;
+  }
+
+  // Alignment traceback
+  uint32_t D0s[read_length];
+  uint32_t HPs[read_length];
+  uint32_t Peq[5] = {0, 0, 0, 0, 0};
+  for (int i = 0; i < 2 * fem_args->error_threshold; i++) {
+    uint8_t base = char_to_uint8(pattern[i]);
+    Peq[base] = Peq[base] | (1 << i);
+  }
+  uint32_t highest_bit_in_band_mask = 1 << (2 * fem_args->error_threshold);
+  uint32_t lowest_bit_in_band_mask = 1;
+  uint32_t VP = 0;
+  uint32_t VN = 0;
+  uint32_t X = 0;
+  uint32_t D0 = 0;
+  uint32_t HN = 0;
+  uint32_t HP = 0;
+  //int num_errors_at_band_start_position = 0;
+  for (int i = 0; i < read_length; i++) {
+    uint8_t pattern_base = char_to_uint8(pattern[i + 2 * fem_args->error_threshold]);
+    Peq[pattern_base] = Peq[pattern_base] | highest_bit_in_band_mask;
+    X = Peq[char_to_uint8(text[i])] | VN;
+    D0 = ((VP + (X & VP)) ^ VP) | X;
+    HN = VP & D0;
+    HP = VN | ~(VP | D0);
+    X = D0 >> 1;
+    VN = X & HP;
+    VP = HN | ~(X | HP);
+    D0s[i] = D0;
+    HPs[i] = HP;
+    //num_errors_at_band_start_position += 1 - (D0 & lowest_bit_in_band_mask);
+    //if (num_errors_at_band_start_position > 3 * fem_args->error_threshold) {
+    //  return fem_args->error_threshold + 1;
+    //}
+    for (int ai = 0; ai < 5; ai++) {
+      Peq[ai] >>= 1;
+    }
+  }
+
+  int pattern_bit_position = mapping_end_position - read_length + 1; // position of ending bit in bit vector 
+  int text_position = read_length - 1; // start from the read end
+  char pre_operation = 'S';
+  int pre_num_operations = 1;
+  num_errors = 0; // # errors in alignment (including soft clip)
+  if (((D0s[text_position] >> pattern_bit_position) & lowest_bit_in_band_mask) && (pattern[mapping_end_position] == text[text_position])) { // match
+    --text_position;
+    --mapping_end_position;
+    pre_operation = 'M';
+    pre_num_operations = 1;
+  } else if (!((D0s[text_position] >> pattern_bit_position) & lowest_bit_in_band_mask)) { // mismatch
+    assert(pattern[mapping_end_position] != text[text_position]);
+    --text_position;
+    --mapping_end_position;
+    ++num_errors;
+    pre_operation = 'S';
+    //pre_operation = 'M';
+    pre_num_operations = 1;
+  } else if (((D0s[text_position] >> pattern_bit_position) & lowest_bit_in_band_mask) && ((HPs[text_position] >> pattern_bit_position) & lowest_bit_in_band_mask)) { // insertion
+    --text_position;
+    ++pattern_bit_position;
+    ++num_errors;
+    pre_operation = 'S';
+    //pre_operation = 'I';
+    pre_num_operations = 1;
+  } else { // deletion
+    assert(1 == 0);
+  }
+
+  int cigar_operation_index = 0;
+  char cigar_operations[read_length];
+  int num_cigar_operations[read_length];
+  while (text_position >= 0) {
+    if (num_errors == mapping_edit_distance) {
+      break;
+    }
+    if (((D0s[text_position] >> pattern_bit_position) & lowest_bit_in_band_mask) && (pattern[mapping_end_position] == text[text_position])) { // match: consume one base from both target and query
+      --text_position;
+      --mapping_end_position;
+      //if (pre_operation == 'S') {
+      //  pre_operation = 'M';
+      //  ++pre_num_operations;
+      //} else 
+      if (pre_operation != 'M') {
+        cigar_operations[cigar_operation_index] = pre_operation;
+        num_cigar_operations[cigar_operation_index] = pre_num_operations;
+        ++cigar_operation_index;
+        pre_operation = 'M';
+        pre_num_operations = 1;
+      } else {
+        ++pre_num_operations;
+      }
+    } else if (!((D0s[text_position] >> pattern_bit_position) & lowest_bit_in_band_mask)) { // mismatch
+      assert(pattern[mapping_end_position] != text[text_position]);
+      --text_position;
+      --mapping_end_position;
+      ++num_errors;
+      if (pre_operation == 'S') {
+        ++pre_num_operations;
+      } else if (pre_operation != 'M') {
+        cigar_operations[cigar_operation_index] = pre_operation;
+        num_cigar_operations[cigar_operation_index] = pre_num_operations;
+        ++cigar_operation_index;
+        pre_operation = 'M';
+        pre_num_operations = 1;
+      } else {
+        ++pre_num_operations;
+      }
+    } else if (((D0s[text_position] >> pattern_bit_position) & lowest_bit_in_band_mask) && (HPs[text_position] >> pattern_bit_position) & lowest_bit_in_band_mask) { // Insertion: consume one base in query
+      --text_position;
+      ++pattern_bit_position;
+      ++num_errors;
+      if (pre_operation == 'S') {
+        ++pre_num_operations;
+      } else if (pre_operation != 'I') {
+        cigar_operations[cigar_operation_index] = pre_operation;
+        num_cigar_operations[cigar_operation_index] = pre_num_operations;
+        ++cigar_operation_index;
+        pre_operation = 'I';
+        pre_num_operations = 1;
+      } else {
+        ++pre_num_operations;
+      }
+      ++mapping_start_position;
+    } else { // Deletion: consume one base in ref
+      --pattern_bit_position;
+      --mapping_end_position;
+      ++num_errors;
+      if (pre_operation != 'D') {
+        cigar_operations[cigar_operation_index] = pre_operation;
+        num_cigar_operations[cigar_operation_index] = pre_num_operations;
+        ++cigar_operation_index;
+        pre_operation = 'D';
+        pre_num_operations = 1;
+      } else {
+        ++pre_num_operations;
+      }
+      --mapping_start_position;
+    }
+  }
+  // After all errors are consumed, the rest must be matches
+  //cigar_operations[cigar_operation_index] = pre_operation;
+  //num_cigar_operations[cigar_operation_index] = pre_num_operations;
+  //++cigar_operation_index;
+  if (text_position >= 0) {
+    if (pre_operation != 'M') {
+      cigar_operations[cigar_operation_index] = pre_operation;
+      num_cigar_operations[cigar_operation_index] = pre_num_operations;
+      ++cigar_operation_index;
+      cigar_operations[cigar_operation_index] = 'M';
+      num_cigar_operations[cigar_operation_index] = text_position + 1;
+    } else {
+      cigar_operations[cigar_operation_index] = 'M';
+      num_cigar_operations[cigar_operation_index] = pre_num_operations + text_position + 1;
+    }
+  } else {
+    cigar_operations[cigar_operation_index] = pre_operation;
+    num_cigar_operations[cigar_operation_index] = pre_num_operations;
+  }
+
+  //CIGAR data is stored as in the BAM format, i.e. (op_len << 4) | op
+  //where op_len is the length in bases and op is a value between 0 and 8
+  //representing one of the operations "MIDNSHP=X" (M = 0; X = 8)
+  //int size_SM = 0;
+  int cigar_operation_index_end = 0;
+  if (cigar_operations[0] == 'S') {
+    num_cigar_operations[1] += num_cigar_operations[0]; 
+    cigar_operation_index_end = 1;
+  }
+  for (int i = cigar_operation_index; i >= cigar_operation_index_end; i--) {
+    //if (Route_Char_Whole[j] == 'M' || Route_Char_Whole[j] == 'S') {
+    //  size_SM = 0;
+    //  while (j > 0 && (Route_Char_Whole[j] == 'M' || Route_Char_Whole[j] == 'S')) {
+    //    size_SM = size_SM + Route_Size_Whole[j];
+    //    j--;
+    //  }
+    //  j++;
+    //  ksprintf(cigar, "%d%c", size_SM, 'M');
+    //} else {
+    //ksprintf(cigar, "%d%c", num_cigar_operations[i], cigar_operations[i]);
+    //fprintf(stderr, "%d%c", num_cigar_operations[i], cigar_operations[i]);
+    uint32_t cigar_uint = num_cigar_operations[i] << 4;
+    if (cigar_operations[i] == 'M') {
+      kv_push(uint32_t, cigar_uint32_t->v, cigar_uint | 0);
+    } else if (cigar_operations[i] == 'I') {
+      kv_push(uint32_t, cigar_uint32_t->v, cigar_uint | 1);
+    } else if (cigar_operations[i] == 'D') {
+      kv_push(uint32_t, cigar_uint32_t->v, cigar_uint | 2);
+    } else if (cigar_operations[i] == 'N') {
+      assert(1 == 0);
+    } else if (cigar_operations[i] == 'S') {
+      assert(1 == 0);
+    } else if (cigar_operations[i] == 'H') {
+      assert(1 == 0);
+    } else if (cigar_operations[i] == 'P') {
+      assert(1 == 0);
+    } else if (cigar_operations[i] == '=') {
+      assert(1 == 0);
+    } else if (cigar_operations[i] == 'X') {
+      assert(1 == 0);
+    } else {
+      //fprintf(stderr, "%d %d %c %d\n", cigar_operation_index, i, cigar_operations[i], num_cigar_operations[i]);
+      assert(1 == 0);
+    }
+    //}
+  }
+  //fprintf(stderr, "\n");
+  return mapping_start_position;
+}
+
+void generate_bam1_t(uint32_t mapping_start_position, int32_t reference_sequence_index, uint8_t mapping_quality, uint16_t flag, const char *query_name, uint16_t query_name_length, uint32_t *cigar, uint32_t num_cigar_operations, const char *query, const char *query_qual, int32_t query_length, bam1_t *sam_alignment) {
+  /*! @typedef
+   *  @abstract Structure for core alignment information.
+   *  @field  pos     0-based leftmost coordinate
+   *  @field  tid     chromosome ID, defined by sam_hdr_t
+   *  @field  bin     bin calculated by bam_reg2bin()
+   *  @field  qual    mapping quality
+   *  @field  l_extranul length of extra NULs between qname & cigar (for alignment)
+   *  @field  flag    bitwise flag
+   *  @field  l_qname length of the query name
+   *  @field  n_cigar number of CIGAR operations
+   *  @field  l_qseq  length of the query sequence (read)
+   *  @field  mtid    chromosome ID of next read in template, defined by sam_hdr_t
+   *  @field  mpos    0-based leftmost coordinate of next read in template
+   *  @field  isize   observed template length ("insert size")
+   */
+  sam_alignment->core.pos = mapping_start_position;
+  sam_alignment->core.tid = reference_sequence_index;
+  sam_alignment->core.qual = mapping_quality;
+  sam_alignment->core.l_extranul = 0; 
+  if ((query_name_length + 1) % 4 != 0) {
+    sam_alignment->core.l_extranul = 4 - ((query_name_length + 1) % 4);
+  }
+  sam_alignment->core.flag = flag;
+  sam_alignment->core.l_qname = query_name_length + 1 + sam_alignment->core.l_extranul;
+  sam_alignment->core.n_cigar = num_cigar_operations;
+  sam_alignment->core.l_qseq = query_length;
+  sam_alignment->core.mtid = -1;
+  sam_alignment->core.mpos = -1;
+  
+  /*! @typedef
+   @abstract Structure for one alignment.
+   @field  core       core information about the alignment
+   @field  id
+   @field  data       all variable-length data, concatenated; structure: qname-cigar-seq-qual-aux
+   @field  l_data     current length of bam1_t::data
+   @field  m_data     maximum length of bam1_t::data
+   @field  mempolicy  memory handling policy, see bam_set_mempolicy()
+   @discussion Notes:
+   1. The data blob should be accessed using bam_get_qname, bam_get_cigar,
+   bam_get_seq, bam_get_qual and bam_get_aux macros.  These returns pointers
+   to the start of each type of data.
+   2. qname is terminated by one to four NULs, so that the following
+   cigar data is 32-bit aligned; core.l_qname includes these trailing NULs,
+   while core.l_extranul counts the excess NULs (so 0 <= l_extranul <= 3).
+   3. Cigar data is encoded 4 bytes per CIGAR operation.
+   See the bam_cigar_* macros for manipulation.
+   4. seq is nibble-encoded according to bam_nt16_table.
+   See the bam_seqi macro for retrieving individual bases.
+   5. Per base qualilties are stored in the Phred scale with no +33 offset.
+   Ie as per the BAM specification and not the SAM ASCII printable method.
+   */
+  /*
+   @discussion Each base is encoded in 4 bits: 1 for A, 2 for C, 4 for G,
+   8 for T and 15 for N. Two bases are packed in one byte with the base
+   at the higher 4 bits having smaller coordinate on the read. It is
+   recommended to use bam_seqi() macro to get the base.
+  */
+  // First calculate the length of data
+  sam_alignment->l_data = sam_alignment->core.l_qname + (sam_alignment->core.n_cigar << 2) + ((sam_alignment->core.l_qseq + 1) >> 1) + sam_alignment->core.l_qseq;
+  if (sam_alignment->l_data > sam_alignment->m_data) {
+    sam_alignment->m_data = sam_alignment->l_data;
+    free(sam_alignment->data);
+    sam_alignment->data = (uint8_t*)calloc(sam_alignment->m_data, sizeof(uint8_t));
+  }
+  // copy qname
+  memcpy(bam_get_qname(sam_alignment), query_name, query_name_length * sizeof(char));
+  // add NULs after qname and before cigar, let me add one nul at the moment and see if okay.
+  bam_get_qname(sam_alignment)[query_name_length] = '\0';
+  // copy cigar
+  memcpy(bam_get_cigar(sam_alignment), cigar, sam_alignment->core.n_cigar * sizeof(uint32_t));
+  // set seq
+  uint8_t *seq = bam_get_seq(sam_alignment);
+  for (size_t i = 0; i < query_length; ++i) {
+    bam_set_seqi(seq, i, seq_nt16_table[(uint8_t)query[i]]);
+  }
+  // copy seq qual
+  uint8_t *seq_qual = bam_get_qual(sam_alignment);
+  memcpy(seq_qual, query_qual, query_length * sizeof(char));
+  // remove +33 offset
+  for (int i = 0; i < query_length; ++i) {
+    seq_qual[i] -= 33;
+  }
 }

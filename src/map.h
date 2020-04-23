@@ -40,13 +40,17 @@
 //  }
 //}
 
-typedef struct {
-  uint64_t num_reads;
-  uint64_t num_mapped_reads;
-  uint64_t num_candidates_without_additonal_qgram_filter;
-  uint64_t num_candidates;
-  uint64_t num_mappings;
-} MappingStats;
+
+
+//void initialize_mapping_args(MappingArgs *mapping_args, int thread_id, const FEMArgs *fem_args, const SequenceBatch *reference_sequence_batch, const Index *index, const InputQueue *input_queue, const OutputQueue *output_queue) {
+//  mapping_args->thread_id = thread_id;
+//  mapping_args->fem_args = fem_args;
+//  mapping_args->reference_sequence_batch = reference_sequence_batch;
+//  mapping_args->index = index;
+//  mapping_args->input_queue = input_queue;
+//  mapping_args->output_queue = output_queue;
+//  mapping_args->mapping_stats = {0, 0, 0, 0, 0};
+//}
 
 typedef struct {
   int thread_id;
@@ -58,16 +62,6 @@ typedef struct {
   OutputQueue *output_queue;
   MappingStats mapping_stats;
 } MappingArgs;
-
-//void initialize_mapping_args(MappingArgs *mapping_args, int thread_id, const FEMArgs *fem_args, const SequenceBatch *reference_sequence_batch, const Index *index, const InputQueue *input_queue, const OutputQueue *output_queue) {
-//  mapping_args->thread_id = thread_id;
-//  mapping_args->fem_args = fem_args;
-//  mapping_args->reference_sequence_batch = reference_sequence_batch;
-//  mapping_args->index = index;
-//  mapping_args->input_queue = input_queue;
-//  mapping_args->output_queue = output_queue;
-//  mapping_args->mapping_stats = {0, 0, 0, 0, 0};
-//}
 
 void *single_end_read_mapping_thread(void *mapping_args);
 

@@ -3,14 +3,19 @@ src_dir=src
 objs_dir=objs
 objs+=$(patsubst %.c,$(objs_dir)/%.o,$(c_source))
 
-cxx=gcc
-cxxflags=-g -Wall -O3 -march=native
+htslib_dir ?= extern/htslib
+htslib_include_dir ?= ${htslib_dir}/include
+htslib_lib_dir ?= ${htslib_dir}/lib
+htslib_lib ?= hts
 
-ldflags=-lpthread -lm -lz
+cxx=gcc
+cxxflags=-g -Wall -O3 -march=native -I${htslib_include_dir}
+
+ldflags=-L${htslib_lib_dir} -Wl,-rpath=${htslib_lib_dir} -l${htslib_lib} -lpthread -lm -lz
 exec=FEM
 
 .PHONY: all
-all: htslib mk_obj_dir $(exec) 
+all: htslib check_htslib mk_obj_dir $(exec) 
 
 .PHONY: htslib
 htslib:
@@ -18,9 +23,14 @@ htslib:
 	cd extern/htslib;\
 	autoheader;\
 	autoconf;\
-	./configure --disable-bz2 --disable-lzma;\
+	./configure CC=${cxx} --disable-bz2 --disable-lzma;\
 	make;\
 	make prefix=. install
+
+.PHONY: check_htslib
+check_htslib:
+	@[ -f "${htslib_include_dir}/htslib/sam.h" ] || { echo "htslib headers not found" >&2; exit 1; }
+	@[ -f "${htslib_lib_dir}/lib${htslib_lib}.so" ] || [ -f "${htslib_lib_dir}/lib${htslib_lib}.a" ] || { echo "htslib library not found" >&2; exit 1; }
 
 .PHONY: mk_obj_dir
 mk_obj_dir:
@@ -34,4 +44,5 @@ $(objs_dir)/%.o: $(src_dir)/%.c
 
 .PHONY: clean
 clean:
+	cd extern/htslib && make clean
 	rm -rf $(exec) $(objs_dir)

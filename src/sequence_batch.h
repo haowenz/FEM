@@ -49,8 +49,16 @@ static inline uint32_t get_sequence_length_from_sequence_batch_at(const Sequence
   return kv_A(sequence_batch->sequences, sequence_index)->seq.l;
 }
 
-static inline const char * get_sequence_name_from_sequence_batch_at(const SequenceBatch *sequence_batch, uint32_t sequence_index) {
+static inline char * get_sequence_name_from_sequence_batch_at(const SequenceBatch *sequence_batch, uint32_t sequence_index) {
   return kv_A(sequence_batch->sequences, sequence_index)->name.s;
+}
+
+static inline size_t get_sequence_name_length_from_sequence_batch_at(const SequenceBatch *sequence_batch, uint32_t sequence_index) {
+  return kv_A(sequence_batch->sequences, sequence_index)->name.l;
+}
+
+static inline char * get_sequence_qual_from_sequence_batch_at(const SequenceBatch *sequence_batch, uint32_t sequence_index) {
+  return kv_A(sequence_batch->sequences, sequence_index)->qual.s;
 }
 
 void initialize_sequence_batch_loading(const char *sequence_file_path, SequenceBatch *sequence_batch);

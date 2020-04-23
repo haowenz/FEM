@@ -55,6 +55,10 @@ static inline int check_args(const FEMArgs *fem_args, const char *reference_file
 }
 
 int map_main(int argc, char *argv[]) {
+  {
+  int a = 2, b = 3, c = 5, d = 9, e = 17, f = 33, g = 139;
+  fprintf(stderr, "%d %d %d %d %d %d %d\n", kv_roundup32(a), kv_roundup32(b), kv_roundup32(c), kv_roundup32(d), kv_roundup32(e), kv_roundup32(f), kv_roundup32(g));
+  }
   char *reference_file_path = NULL;
   char *index_file_path = NULL;
   char *read1_file_path = NULL;
@@ -148,7 +152,7 @@ int map_main(int argc, char *argv[]) {
   initialize_input_queue(read1_file_path, read_batch_max_size, input_queue_max_size, &input_queue);
   OutputQueue output_queue;
   uint32_t output_queue_max_size = 100000;
-  initialize_output_queue(output_file_path, fem_args.num_threads, output_queue_max_size, &output_queue);
+  initialize_output_queue(output_file_path, &reference_sequence_batch, fem_args.num_threads, output_queue_max_size, &output_queue);
   MappingArgs mapping_args[fem_args.num_threads];
   for (int i = 0; i < fem_args.num_threads; ++i) {
     mapping_args[i].thread_id = i;

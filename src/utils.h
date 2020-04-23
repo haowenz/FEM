@@ -22,6 +22,34 @@ typedef struct {
 } kvec_t_uint64_t;
 
 typedef struct {
+  kvec_t(uint32_t) v;
+} kvec_t_uint32_t;
+
+typedef struct {
+  kvec_t(uint8_t) v;
+} kvec_t_uint8_t;
+
+typedef struct {
+  uint32_t read_index;
+  uint8_t edit_distance;
+  uint32_t candidate_position;
+  int16_t end_position_offset; // end_postion = candiate_position + end_position_offset
+  //uint8_t mapq : 6, direction : 1, is_unique : 1;
+} Mapping;
+
+typedef struct {
+  kvec_t(Mapping) v;
+} kvec_t_Mapping;
+
+typedef struct {
+  uint64_t num_reads;
+  uint64_t num_mapped_reads;
+  uint64_t num_candidates_without_additonal_qgram_filter;
+  uint64_t num_candidates;
+  uint64_t num_mappings;
+} MappingStats;
+
+typedef struct {
   int kmer_size;
   int step_size;
   int error_threshold;
