@@ -11,6 +11,8 @@ void *single_end_read_mapping_thread(void *mapping_args_v) {
   SequenceBatch read_batch;
   initialize_sequence_batch_with_max_size(mapping_args->max_read_batch_size, &read_batch);
   bam1_t *sam_alignment = bam_init1(); 
+  kvec_t_Mapping mappings;
+  kv_init(mappings.v);
   while (1) {
     // Get read batch
     pop_input_queue(&read_batch, mapping_args->input_queue);
@@ -28,11 +30,13 @@ void *single_end_read_mapping_thread(void *mapping_args_v) {
       mapping_args->mapping_stats.num_candidates += num_candidates;
       if (num_candidates > 0) {
         // Verify candidates
-        uint32_t num_mappings = verify_candidates(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, 0, mapping_args->reference_sequence_batch, candidates.v.a, num_candidates, &sam_alignment);
+        uint32_t num_mappings = verify_candidates(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, 0, mapping_args->reference_sequence_batch, candidates.v.a, num_candidates, &sam_alignment, &mappings);
         mapping_args->mapping_stats.num_mappings += num_mappings;
         if (num_mappings > 0) {
           ++(mapping_args->mapping_stats.num_mapped_reads);
           // Output mappings
+          kv_clear(mappings.v);
+          process_mappings(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, 0, mapping_args->reference_sequence_batch, mappings.v.a, num_mappings, &sam_alignment);
         }
       }
     }
@@ -47,6 +51,7 @@ void *single_end_read_mapping_thread(void *mapping_args_v) {
   kv_destroy(candidates.v);
   kv_destroy(buffer1.v);
   kv_destroy(buffer2.v);
+  kv_destroy(mappings.v);
   fprintf(stderr, "Thread %d completed.\n", mapping_args->thread_id);
   return NULL;
 }

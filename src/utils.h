@@ -30,12 +30,20 @@ typedef struct {
 } kvec_t_uint8_t;
 
 typedef struct {
-  uint32_t read_index;
   uint8_t edit_distance;
-  uint32_t candidate_position;
+  //uint64_t mapping_end_position;
+  uint64_t candidate_position;
   int16_t end_position_offset; // end_postion = candiate_position + end_position_offset
   //uint8_t mapq : 6, direction : 1, is_unique : 1;
 } Mapping;
+
+//typedef struct {
+//  uint32_t read_index;
+//  uint8_t edit_distance;
+//  uint32_t candidate_position;
+//  int16_t end_position_offset; // end_postion = candiate_position + end_position_offset
+//  //uint8_t mapq : 6, direction : 1, is_unique : 1;
+//} Mapping;
 
 typedef struct {
   kvec_t(Mapping) v;

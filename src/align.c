@@ -1,23 +1,20 @@
 #include "align.h"
 #include "kstring.h"
+#include "ksort.h"
 
-int verify_candidates(const FEMArgs *fem_args, OutputQueue *output_queue, const SequenceBatch *read_sequence_batch, uint32_t read_sequence_index, int is_reverse_complement, const SequenceBatch *reference_sequence_batch, const uint64_t *candidates, uint32_t num_candidates, bam1_t **sam_alignment) {
+uint32_t verify_candidates(const FEMArgs *fem_args, OutputQueue *output_queue, const SequenceBatch *read_sequence_batch, uint32_t read_sequence_index, int is_reverse_complement, const SequenceBatch *reference_sequence_batch, const uint64_t *candidates, uint32_t num_candidates, bam1_t **sam_alignment, kvec_t_Mapping *mappings) {
   //const uint8_t *text = read->bases;
   //if (is_reverse_complement == 1) {
   //  text = read->rc_bases;
   //}
   int read_length = get_sequence_length_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
   const char *read_sequence = get_sequence_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
-
   // Compute how many runs of vectorized code needed
   int num_mappings = 0;
   uint32_t num_vpus = num_candidates / NUM_VPU_LANES;
   uint32_t num_remains = num_candidates % NUM_VPU_LANES;
   int16_t mapping_edit_distances[NUM_VPU_LANES];
   int16_t mapping_end_positions[NUM_VPU_LANES]; 
-  int64_t previous_mapping_end_position = -read_length;
-  kvec_t_uint32_t cigar_uint32_t;
-  kv_init(cigar_uint32_t.v);
   for (uint32_t vpu_index = 0; vpu_index < num_vpus; ++vpu_index) {
     for (int li = 0; li < NUM_VPU_LANES; ++li){
       mapping_end_positions[li] = read_length - 1;
@@ -25,28 +22,8 @@ int verify_candidates(const FEMArgs *fem_args, OutputQueue *output_queue, const 
     vectorized_banded_edit_distance(fem_args, vpu_index, reference_sequence_batch, read_sequence, read_length, candidates, num_candidates, mapping_edit_distances, mapping_end_positions);
     for (int mi = 0; mi < NUM_VPU_LANES; ++mi) {
       if (mapping_edit_distances[mi] <= fem_args->error_threshold) {
-        //Mapping mapping = {read_sequence_index, mapping_edit_distance};
-        //kv_push(mappings_on_diff_ref[reference_sequence_index]);
-        int64_t mapping_end_position = candidates[vpu_index * NUM_VPU_LANES + mi] + mapping_end_positions[mi] + 1;
-        if (previous_mapping_end_position == -read_length) {
-          previous_mapping_end_position = mapping_end_position;
-        } else if (mapping_end_position == previous_mapping_end_position) {
-          continue;
-        } else {
-          previous_mapping_end_position = mapping_end_position;
-        }
-        int read_name_length = get_sequence_name_length_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
-        const char *read_name = get_sequence_name_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
-        const char *read_qual = get_sequence_qual_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
-        int32_t reference_sequence_index = candidates[vpu_index * NUM_VPU_LANES + mi] >> 32;
-        const char *reference_sequence = get_sequence_from_sequence_batch_at(reference_sequence_batch, reference_sequence_index) + (uint32_t)candidates[vpu_index * NUM_VPU_LANES + mi];
-        kv_clear(cigar_uint32_t.v);
-        int mapping_start_position = generate_alignment(fem_args, reference_sequence, read_sequence, read_length, mapping_edit_distances[mi], mapping_end_positions[mi], NULL, &cigar_uint32_t);
-        mapping_start_position += (int32_t)candidates[vpu_index * NUM_VPU_LANES + mi];
-        uint8_t mapping_quality = 255;
-        uint16_t flag = 0;
-        generate_bam1_t(mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, read_length, *sam_alignment);
-        //push_output_queue(sam_alignment, output_queue);
+        Mapping mapping = {(uint8_t)mapping_edit_distances[mi], candidates[vpu_index * NUM_VPU_LANES + mi], mapping_end_positions[mi]};
+        kv_push(Mapping, mappings->v, mapping);
         ++num_mappings;
       }
     }
@@ -59,35 +36,56 @@ int verify_candidates(const FEMArgs *fem_args, OutputQueue *output_queue, const 
     int current_mapping_end_position = -read_length;
     int current_mapping_edit_distance = banded_edit_distance(fem_args, reference_sequence, read_sequence, read_length, &current_mapping_end_position);
     if (current_mapping_edit_distance <= fem_args->error_threshold) {
-      int64_t mapping_end_position = candidate + current_mapping_end_position + 1;
-      if (previous_mapping_end_position == -read_length) {
-        previous_mapping_end_position = mapping_end_position;
-      } else if (mapping_end_position == previous_mapping_end_position) {
-        continue;
-      } else {
-        previous_mapping_end_position = mapping_end_position;
-      }
-      int read_name_length = get_sequence_name_length_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
-      const char *read_name = get_sequence_name_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
-      const char *read_qual = get_sequence_qual_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
-      //int32_t reference_sequence_index = candidates[vpu_index * NUM_VPU_LANES + mi] >> 32;
-      //const char *reference_sequence = get_sequence_from_sequence_batch_at(reference_sequence_batch, reference_sequence_index) + (uint32_t)candidates[vpu_index * NUM_VPU_LANES + mi];
-      kv_clear(cigar_uint32_t.v);
-      int mapping_start_position = generate_alignment(fem_args, reference_sequence, read_sequence, read_length, current_mapping_edit_distance, current_mapping_end_position, NULL, &cigar_uint32_t);
-      //mapping_start_position += (int32_t)candidates[vpu_index * NUM_VPU_LANES + mi];
-      mapping_start_position += (int32_t)candidate;
-      uint8_t mapping_quality = 255;
-      uint16_t flag = 0;
-      generate_bam1_t(mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, read_length, *sam_alignment);
-      //push_output_queue(sam_alignment, output_queue);
+      Mapping mapping = {current_mapping_edit_distance, candidate, current_mapping_end_position};
+      kv_push(Mapping, mappings->v, mapping);
       ++num_mappings;
     }
+  }
+  return num_mappings;
+}
+
+#define MappingSortKey(m) ((((uint64_t)(m).edit_distance)<<60)|((m).candidate_position+(m).end_position_offset))
+KRADIX_SORT_INIT(mapping, Mapping, MappingSortKey, 8);
+
+uint32_t process_mappings(const FEMArgs *fem_args, OutputQueue *output_queue, const SequenceBatch *read_sequence_batch, uint32_t read_sequence_index, int is_reverse_complement, const SequenceBatch *reference_sequence_batch, Mapping *mappings, uint32_t num_mappings, bam1_t **sam_alignment) {
+  radix_sort_mapping(mappings, mappings + num_mappings);
+  kvec_t_uint32_t cigar_uint32_t;
+  kv_init(cigar_uint32_t.v);
+  const char *read_sequence = get_sequence_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
+  const char *read_qual = get_sequence_qual_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
+  int read_length = get_sequence_length_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
+  const char *read_name = get_sequence_name_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
+  int read_name_length = get_sequence_name_length_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
+  for (uint32_t mi = 0; mi < num_mappings; ++mi) {
+    uint64_t candidate_position = mappings[mi].candidate_position;
+    uint32_t reference_sequence_index = candidate_position >> 32;
+    const char *reference_sequence = get_sequence_from_sequence_batch_at(reference_sequence_batch, reference_sequence_index) + (uint32_t)candidate_position;
+    kv_clear(cigar_uint32_t.v);
+    int mapping_start_position = generate_alignment(fem_args, reference_sequence, read_sequence, read_length, mappings[mi].edit_distance, mappings[mi].end_position_offset, NULL, &cigar_uint32_t);
+    mapping_start_position += (uint32_t)candidate_position;
+    uint8_t mapping_quality = 255;
+    uint16_t flag = 0;
+    if (mi > 0) {
+      flag |= BAM_FSECONDARY;
+      generate_bam1_t(mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, 0, *sam_alignment);
+    } else {
+      generate_bam1_t(mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, read_length, *sam_alignment);
+    }
+    //push_output_queue(sam_alignment, output_queue);
   }
   kv_destroy(cigar_uint32_t.v);
   return num_mappings;
 }
 
-int banded_edit_distance(const FEMArgs *fem_args, const char *pattern, const char *text, int read_length, int *mapping_end_position) {
+// Banded Myers bit-parallel algorithm
+/* @param fem_args             FEM parameters 
+   @param pattern              Reference sequence starting from (candidate position - error threshold) 
+   @param text                 Read sequence
+   @param text_length          Read length
+   @param mapping_end_position 0-based mapping end position (inclusive) 
+   @return Edit distance of the mapping.
+   */
+int banded_edit_distance(const FEMArgs *fem_args, const char *pattern, const char *text, int text_length, int *mapping_end_position) {
   uint32_t Peq[5] = {0, 0, 0, 0, 0};
   for (int i = 0; i < 2 * fem_args->error_threshold; i++) {
     uint8_t base = char_to_uint8(pattern[i]);
@@ -102,7 +100,7 @@ int banded_edit_distance(const FEMArgs *fem_args, const char *pattern, const cha
   uint32_t HN = 0;
   uint32_t HP = 0;
   int num_errors_at_band_start_position = 0;
-  for (int i = 0; i < read_length; i++) {
+  for (int i = 0; i < text_length; i++) {
     uint8_t pattern_base = char_to_uint8(pattern[i + 2 * fem_args->error_threshold]);
     Peq[pattern_base] = Peq[pattern_base] | highest_bit_in_band_mask;
     X = Peq[char_to_uint8(text[i])] | VN;
@@ -120,7 +118,7 @@ int banded_edit_distance(const FEMArgs *fem_args, const char *pattern, const cha
       Peq[ai] >>= 1;
     }
   }
-  int band_start_position = read_length - 1;
+  int band_start_position = text_length - 1;
   int min_num_errors = num_errors_at_band_start_position;
   *mapping_end_position = band_start_position;
   for (int i = 0; i < 2 * fem_args->error_threshold; i++) {
