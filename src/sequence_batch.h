@@ -19,7 +19,8 @@ typedef struct {
   gzFile sequence_file; 
   kseq_t *sequence_kseq;
   kvec_t(kseq_t*) sequences;
-  //std::vector<std::string> negative_sequence_batch;
+  //kvec_t(kvec_t(char)) negative_sequences;
+  kvec_t(kvec_t_char) negative_sequences;
 } SequenceBatch;
 
 static inline void swap_sequences_in_sequence_batch(SequenceBatch *a, SequenceBatch *b) {
@@ -43,6 +44,10 @@ static inline void swap_kstring_t(kstring_t *a, kstring_t *b) {
 
 static inline const char * get_sequence_from_sequence_batch_at(const SequenceBatch *sequence_batch, size_t sequence_index) {
   return kv_A(sequence_batch->sequences, sequence_index)->seq.s;
+}
+
+static inline const char * get_negative_sequence_from_sequence_batch_at(const SequenceBatch *sequence_batch, uint32_t sequence_index) {
+  return kv_A(sequence_batch->negative_sequences, sequence_index).v.a;
 }
 
 static inline uint32_t get_sequence_length_from_sequence_batch_at(const SequenceBatch *sequence_batch, size_t sequence_index) {
@@ -77,23 +82,20 @@ void load_all_sequences_into_sequence_batch(SequenceBatch *sequence_batch);
 //inline uint32_t GetSequenceIdAt(uint32_t sequence_index) const {
 //  return sequence_batch_[sequence_index]->id;
 //}
-//inline const std::string & GetNegativeSequenceAt(uint32_t sequence_index) const {
-//  return negative_sequence_batch_[sequence_index];
-//}
+
 //  inline char GetReverseComplementBaseOfSequenceAt(uint32_t sequence_index, uint32_t position) {
 //    kseq_t *sequence = sequence_batch_[sequence_index];
 //    return Uint8ToChar(((uint8_t)3) ^ (CharToUint8((sequence->seq.s)[sequence->seq.l - position - 1])));
 //  }
-//inline void PrepareNegativeSequenceAt(uint32_t sequence_index) {
-//  kseq_t *sequence = sequence_batch_[sequence_index];
-//  uint32_t sequence_length = sequence->seq.l;
-//  std::string &negative_sequence = negative_sequence_batch_[sequence_index];
-//  negative_sequence.clear();
-//  negative_sequence.reserve(sequence_length);
-//  for (uint32_t i = 0; i < sequence_length; ++i) {
-//    negative_sequence.push_back(Uint8ToChar(((uint8_t)3) ^ (CharToUint8((sequence->seq.s)[sequence_length - i - 1]))));
-//  }
-//}
+static inline void prepare_negative_sequence_at(uint32_t sequence_index, SequenceBatch *sequence_batch) {
+  kseq_t *sequence = kv_A(sequence_batch->sequences, sequence_index);
+  uint32_t sequence_length = sequence->seq.l;
+  kv_clear(kv_A(sequence_batch->negative_sequences, sequence_index).v);
+  //negative_sequence.reserve(sequence_length);
+  for (uint32_t i = 0; i < sequence_length; ++i) {
+    kv_push(char, kv_A(sequence_batch->negative_sequences, sequence_index).v, uint8_to_char(((uint8_t)3) ^ (char_to_uint8((sequence->seq.s)[sequence_length - i - 1]))));
+  }
+}
 //inline void TrimSequenceAt(uint32_t sequence_index, int length_after_trim) {
 //  kseq_t *sequence = sequence_batch_[sequence_index];
 //  negative_sequence_batch_[sequence_index].erase(negative_sequence_batch_[sequence_index].begin(), negative_sequence_batch_[sequence_index].begin() + sequence->seq.l - length_after_trim);

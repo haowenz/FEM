@@ -4,19 +4,27 @@
 
 void initialize_sequence_batch(SequenceBatch *sequence_batch) { 
   kv_init(sequence_batch->sequences);
+  kv_init(sequence_batch->negative_sequences);
 }
 
 void initialize_sequence_batch_with_max_size(uint32_t max_num_sequences, SequenceBatch *sequence_batch) { 
   sequence_batch->max_num_sequences = max_num_sequences;
   kv_init(sequence_batch->sequences);
   kv_resize(kseq_t*, sequence_batch->sequences, max_num_sequences);
+  kv_init(sequence_batch->negative_sequences);// = (kvec_t(char)*)malloc(sequence_batch->max_num_sequences * sizeof(kvec_t(char))); 
+  kv_resize(kvec_t_char, sequence_batch->negative_sequences, max_num_sequences);
   for (uint32_t i = 0; i < max_num_sequences; ++i) {
     kv_push(kseq_t*, sequence_batch->sequences, (kseq_t*)calloc(1, sizeof(kseq_t)));
+    kv_init(kv_A(sequence_batch->negative_sequences, i).v);
   }
 }
 
 void destory_sequence_batch(SequenceBatch *sequence_batch) {
   kv_destroy(sequence_batch->sequences);
+  for (uint32_t i = 0; i < sequence_batch->max_num_sequences; ++i) {
+    kv_destroy(kv_A(sequence_batch->negative_sequences, i).v);
+  }
+  kv_destroy(sequence_batch->negative_sequences);
 }
 
 void initialize_sequence_batch_loading(const char *sequence_file_path, SequenceBatch *sequence_batch) {
@@ -100,6 +108,12 @@ void load_all_sequences_into_sequence_batch(SequenceBatch *sequence_batch) {
       break;
     }
     length = kseq_read(sequence_batch->sequence_kseq);
+  }
+  sequence_batch->max_num_sequences = sequence_batch->num_loaded_sequences;
+  kv_resize(kvec_t_char, sequence_batch->negative_sequences, sequence_batch->max_num_sequences);
+  for (uint32_t i = 0; i < sequence_batch->max_num_sequences; ++i) {
+    //kv_push(kvec_t(char), sequence_batch->negative_sequences, kvec_t(char));
+    kv_init(kv_A(sequence_batch->negative_sequences, i).v);
   }
   fprintf(stderr, "Number of sequences: %d\n", sequence_batch->num_loaded_sequences);
   fprintf(stderr, "Number of bases: %ld\n", sequence_batch->num_bases);

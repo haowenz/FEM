@@ -143,7 +143,7 @@ void remove_out_ranged_candidates(const FEMArgs *fem_args, uint32_t read_length,
   }
 }
 
-uint32_t generate_group_seeding_candidates(const FEMArgs *fem_args, const SequenceBatch *read_sequence_batch, size_t read_index, int is_reverse_complement, const SequenceBatch *reference_sequence_batch, const Index *index, kvec_t_uint64_t *buffer1, kvec_t_uint64_t *buffer2, kvec_t_uint64_t *candidates, uint32_t *num_candidates_without_additonal_qgram_filter) {
+uint32_t generate_group_seeding_candidates(const FEMArgs *fem_args, const SequenceBatch *read_sequence_batch, size_t read_index, uint8_t direction, const SequenceBatch *reference_sequence_batch, const Index *index, kvec_t_uint64_t *buffer1, kvec_t_uint64_t *buffer2, kvec_t_uint64_t *candidates, uint32_t *num_candidates_without_additonal_qgram_filter) {
   //const uint8_t *bases = read->bases;
   //if (is_reverse_complement == 1) {
   //  bases = read->rc_bases;
@@ -154,6 +154,9 @@ uint32_t generate_group_seeding_candidates(const FEMArgs *fem_args, const Sequen
 
   uint32_t read_length = get_sequence_length_from_sequence_batch_at(read_sequence_batch, read_index);
   const char *read_sequence = get_sequence_from_sequence_batch_at(read_sequence_batch, read_index);
+  if (direction == NEGATIVE_DIRECTION) {
+    read_sequence = get_negative_sequence_from_sequence_batch_at(read_sequence_batch, read_index);
+  }
 
   // Check if we can select enough seeds in the read
   int seed_length_in_seed_group = fem_args->kmer_size / fem_args->step_size;

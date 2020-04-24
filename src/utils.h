@@ -15,8 +15,10 @@
 #include <pthread.h>
 #include <mm_malloc.h>
 
-#include "ksort.h"
 #include "kvec.h"
+
+#define POSITIVE_DIRECTION 0
+#define NEGATIVE_DIRECTION 1
 
 typedef struct {
   kvec_t(uint64_t) v;
@@ -31,22 +33,15 @@ typedef struct {
 } kvec_t_uint8_t;
 
 typedef struct {
-  uint8_t edit_distance;
+  kvec_t(char) v;
+} kvec_t_char;
+
+typedef struct {
+  uint8_t direction:1, edit_distance:4, :3/* Reserved */;
   uint64_t candidate_position;
   int16_t end_position_offset; // end_postion = candiate_position + end_position_offset
   //uint8_t mapq : 6, direction : 1, is_unique : 1;
 } Mapping;
-
-#define MappingSortKey(m) ((((uint64_t)(m).edit_distance)<<60)|((m).candidate_position+(m).end_position_offset))
-KRADIX_SORT_INIT(mapping, Mapping, MappingSortKey, 8);
-
-//typedef struct {
-//  uint32_t read_index;
-//  uint8_t edit_distance;
-//  uint32_t candidate_position;
-//  int16_t end_position_offset; // end_postion = candiate_position + end_position_offset
-//  //uint8_t mapq : 6, direction : 1, is_unique : 1;
-//} Mapping;
 
 typedef struct {
   kvec_t(Mapping) v;

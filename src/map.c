@@ -24,20 +24,31 @@ void *single_end_read_mapping_thread(void *mapping_args_v) {
     mapping_args->mapping_stats.num_reads += read_batch.num_loaded_sequences;
     // Generate candidates
     for (uint32_t read_index = 0; read_index < read_batch.num_loaded_sequences; ++read_index) {
+      kv_clear(mappings.v);
+      // Positive strand
       uint32_t num_candidates_without_additonal_qgram_filter = 0;
-      uint32_t num_candidates = generate_group_seeding_candidates(mapping_args->fem_args, &read_batch, read_index, 0, mapping_args->reference_sequence_batch, mapping_args->index, &buffer1, &buffer2, &candidates, &num_candidates_without_additonal_qgram_filter);
+      uint32_t num_candidates = generate_group_seeding_candidates(mapping_args->fem_args, &read_batch, read_index, POSITIVE_DIRECTION, mapping_args->reference_sequence_batch, mapping_args->index, &buffer1, &buffer2, &candidates, &num_candidates_without_additonal_qgram_filter);
       mapping_args->mapping_stats.num_candidates_without_additonal_qgram_filter += num_candidates_without_additonal_qgram_filter;
       mapping_args->mapping_stats.num_candidates += num_candidates;
       if (num_candidates > 0) {
         // Verify candidates
-        uint32_t num_mappings = verify_candidates(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, 0, mapping_args->reference_sequence_batch, candidates.v.a, num_candidates, &mappings);
+        uint32_t num_mappings = verify_candidates(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, POSITIVE_DIRECTION, mapping_args->reference_sequence_batch, candidates.v.a, num_candidates, &mappings);
         mapping_args->mapping_stats.num_mappings += num_mappings;
-        if (num_mappings > 0) {
-          ++(mapping_args->mapping_stats.num_mapped_reads);
-          // Output mappings
-          kv_clear(mappings.v);
-          process_mappings(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, 0, mapping_args->reference_sequence_batch, mappings.v.a, num_mappings, &sam_alignment);
-        }
+      }
+      // Negative strand
+      prepare_negative_sequence_at(read_index, &read_batch);
+      num_candidates_without_additonal_qgram_filter = 0;
+      num_candidates = generate_group_seeding_candidates(mapping_args->fem_args, &read_batch, read_index, NEGATIVE_DIRECTION, mapping_args->reference_sequence_batch, mapping_args->index, &buffer1, &buffer2, &candidates, &num_candidates_without_additonal_qgram_filter);
+      mapping_args->mapping_stats.num_candidates_without_additonal_qgram_filter += num_candidates_without_additonal_qgram_filter;
+      mapping_args->mapping_stats.num_candidates += num_candidates;
+      if (num_candidates > 0) {
+        // Verify candidates
+        uint32_t num_mappings = verify_candidates(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, NEGATIVE_DIRECTION, mapping_args->reference_sequence_batch, candidates.v.a, num_candidates, &mappings);
+        mapping_args->mapping_stats.num_mappings += num_mappings;
+      }
+      if (kv_size(mappings.v) > 0) {
+        ++(mapping_args->mapping_stats.num_mapped_reads);
+        process_mappings(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, mapping_args->reference_sequence_batch, mappings.v.a, kv_size(mappings.v), &sam_alignment);
       }
     }
     fprintf(stderr, "Mapped read batch in %fs.\n", get_real_time() - real_start_time);
