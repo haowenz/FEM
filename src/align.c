@@ -1,8 +1,7 @@
 #include "align.h"
-#include "kstring.h"
-#include "ksort.h"
+//#include "kstring.h"
 
-uint32_t verify_candidates(const FEMArgs *fem_args, OutputQueue *output_queue, const SequenceBatch *read_sequence_batch, uint32_t read_sequence_index, int is_reverse_complement, const SequenceBatch *reference_sequence_batch, const uint64_t *candidates, uint32_t num_candidates, bam1_t **sam_alignment, kvec_t_Mapping *mappings) {
+uint32_t verify_candidates(const FEMArgs *fem_args, OutputQueue *output_queue, const SequenceBatch *read_sequence_batch, uint32_t read_sequence_index, int is_reverse_complement, const SequenceBatch *reference_sequence_batch, const uint64_t *candidates, uint32_t num_candidates, kvec_t_Mapping *mappings) {
   //const uint8_t *text = read->bases;
   //if (is_reverse_complement == 1) {
   //  text = read->rc_bases;
@@ -44,9 +43,6 @@ uint32_t verify_candidates(const FEMArgs *fem_args, OutputQueue *output_queue, c
   return num_mappings;
 }
 
-#define MappingSortKey(m) ((((uint64_t)(m).edit_distance)<<60)|((m).candidate_position+(m).end_position_offset))
-KRADIX_SORT_INIT(mapping, Mapping, MappingSortKey, 8);
-
 uint32_t process_mappings(const FEMArgs *fem_args, OutputQueue *output_queue, const SequenceBatch *read_sequence_batch, uint32_t read_sequence_index, int is_reverse_complement, const SequenceBatch *reference_sequence_batch, Mapping *mappings, uint32_t num_mappings, bam1_t **sam_alignment) {
   radix_sort_mapping(mappings, mappings + num_mappings);
   kvec_t_uint32_t cigar_uint32_t;
@@ -56,7 +52,9 @@ uint32_t process_mappings(const FEMArgs *fem_args, OutputQueue *output_queue, co
   int read_length = get_sequence_length_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
   const char *read_name = get_sequence_name_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
   int read_name_length = get_sequence_name_length_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
+  num_mappings = 1;
   for (uint32_t mi = 0; mi < num_mappings; ++mi) {
+    uint8_t edit_distance = mappings[mi].edit_distance;
     uint64_t candidate_position = mappings[mi].candidate_position;
     uint32_t reference_sequence_index = candidate_position >> 32;
     const char *reference_sequence = get_sequence_from_sequence_batch_at(reference_sequence_batch, reference_sequence_index) + (uint32_t)candidate_position;
@@ -67,11 +65,11 @@ uint32_t process_mappings(const FEMArgs *fem_args, OutputQueue *output_queue, co
     uint16_t flag = 0;
     if (mi > 0) {
       flag |= BAM_FSECONDARY;
-      generate_bam1_t(mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, 0, *sam_alignment);
+      generate_bam1_t(edit_distance, mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, 0, *sam_alignment);
     } else {
-      generate_bam1_t(mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, read_length, *sam_alignment);
+      generate_bam1_t(edit_distance, mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, read_length, *sam_alignment);
     }
-    //push_output_queue(sam_alignment, output_queue);
+    push_output_queue(sam_alignment, output_queue);
   }
   kv_destroy(cigar_uint32_t.v);
   return num_mappings;
@@ -492,7 +490,7 @@ int generate_alignment(const FEMArgs *fem_args, const char *pattern, const char 
   return mapping_start_position;
 }
 
-void generate_bam1_t(uint32_t mapping_start_position, int32_t reference_sequence_index, uint8_t mapping_quality, uint16_t flag, const char *query_name, uint16_t query_name_length, uint32_t *cigar, uint32_t num_cigar_operations, const char *query, const char *query_qual, int32_t query_length, bam1_t *sam_alignment) {
+void generate_bam1_t(uint8_t edit_distance, uint32_t mapping_start_position, int32_t reference_sequence_index, uint8_t mapping_quality, uint16_t flag, const char *query_name, uint16_t query_name_length, uint32_t *cigar, uint32_t num_cigar_operations, const char *query, const char *query_qual, int32_t query_length, bam1_t *sam_alignment) {
   /*! @typedef
    *  @abstract Structure for core alignment information.
    *  @field  pos     0-based leftmost coordinate
@@ -575,4 +573,5 @@ void generate_bam1_t(uint32_t mapping_start_position, int32_t reference_sequence
   for (int i = 0; i < query_length; ++i) {
     seq_qual[i] -= 33;
   }
+  bam_aux_update_int(sam_alignment, "NM", edit_distance);
 }

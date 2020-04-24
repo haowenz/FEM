@@ -30,7 +30,7 @@ void *single_end_read_mapping_thread(void *mapping_args_v) {
       mapping_args->mapping_stats.num_candidates += num_candidates;
       if (num_candidates > 0) {
         // Verify candidates
-        uint32_t num_mappings = verify_candidates(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, 0, mapping_args->reference_sequence_batch, candidates.v.a, num_candidates, &sam_alignment, &mappings);
+        uint32_t num_mappings = verify_candidates(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, 0, mapping_args->reference_sequence_batch, candidates.v.a, num_candidates, &mappings);
         mapping_args->mapping_stats.num_mappings += num_mappings;
         if (num_mappings > 0) {
           ++(mapping_args->mapping_stats.num_mapped_reads);
