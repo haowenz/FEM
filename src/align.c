@@ -55,6 +55,7 @@ KRADIX_SORT_INIT(mapping, Mapping, MappingSortKey, 8);
 
 uint32_t process_mappings(const FEMArgs *fem_args, OutputQueue *output_queue, const SequenceBatch *read_sequence_batch, uint32_t read_sequence_index, const SequenceBatch *reference_sequence_batch, Mapping *mappings, uint32_t num_mappings, bam1_t **sam_alignment) {
   radix_sort_mapping(mappings, mappings + num_mappings);
+  kstring_t MD_tag = {0, 0, NULL};
   kvec_t_uint32_t cigar_uint32_t;
   kv_init(cigar_uint32_t.v);
   const char *read_qual = get_sequence_qual_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
@@ -69,16 +70,17 @@ uint32_t process_mappings(const FEMArgs *fem_args, OutputQueue *output_queue, co
     uint32_t reference_sequence_index = candidate_position >> 32;
     const char *reference_sequence = get_sequence_from_sequence_batch_at(reference_sequence_batch, reference_sequence_index) + (uint32_t)candidate_position;
     kv_clear(cigar_uint32_t.v);
-    int mapping_start_position = generate_alignment(fem_args, reference_sequence, read_sequence, read_length, mappings[mi].edit_distance, mappings[mi].end_position_offset, NULL, &cigar_uint32_t);
+    MD_tag.l = 0;
+    int mapping_start_position = generate_alignment(fem_args, reference_sequence, read_sequence, read_length, mappings[mi].edit_distance, mappings[mi].end_position_offset, NULL, &cigar_uint32_t, &MD_tag);
     read_sequence = get_sequence_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
     mapping_start_position += (uint32_t)candidate_position;
     uint8_t mapping_quality = 255;
     uint16_t flag = mappings[mi].direction == POSITIVE_DIRECTION ? 0 : BAM_FREVERSE;
     if (mi > 0) {
       flag |= BAM_FSECONDARY;
-      generate_bam1_t(edit_distance, mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, 0, *sam_alignment);
+      generate_bam1_t(edit_distance, &MD_tag, mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, 0, *sam_alignment);
     } else {
-      generate_bam1_t(edit_distance, mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, read_length, *sam_alignment);
+      generate_bam1_t(edit_distance, &MD_tag, mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, read_length, *sam_alignment);
     }
     push_output_queue(sam_alignment, output_queue);
   }
@@ -271,7 +273,7 @@ void vectorized_banded_edit_distance(const FEMArgs *fem_args, const uint32_t vpu
   _mm_store_si128((__m128i *)mapping_edit_distances, min_num_errors_vpu);
 }
 
-int generate_alignment(const FEMArgs *fem_args, const char *pattern, const char *text, int read_length, int mapping_edit_distance, int mapping_end_position, kstring_t *cigar, kvec_t_uint32_t *cigar_uint32_t) {
+int generate_alignment(const FEMArgs *fem_args, const char *pattern, const char *text, int read_length, int mapping_edit_distance, int mapping_end_position, kstring_t *cigar, kvec_t_uint32_t *cigar_uint32_t, kstring_t *MD_tag) {
   // Note that we do a semi-global alignemnt, that is, errors at two ends of ref are not penalized and read is aligned globally
   // Also note that cigar operations are on ref 
   // M/I/S/=/X operations shall equal the length of SEQ
@@ -286,10 +288,11 @@ int generate_alignment(const FEMArgs *fem_args, const char *pattern, const char 
       ++num_errors;
     }
   }
-  if (num_errors == mapping_edit_distance) {
+  if (num_errors == 0) { // can only work with 0 edit distance
     //ksprintf(cigar, "%d%c", read_length, 'M');
     uint32_t cigar_uint = read_length << 4;
     kv_push(uint32_t, cigar_uint32_t->v, cigar_uint | 0);
+    generate_MD_tag(pattern, text, mapping_start_position, cigar_uint32_t, MD_tag);
     return mapping_start_position;
   }
 
@@ -356,6 +359,7 @@ int generate_alignment(const FEMArgs *fem_args, const char *pattern, const char 
     pre_operation = 'S';
     //pre_operation = 'I';
     pre_num_operations = 1;
+    ++mapping_start_position;
   } else { // deletion
     assert(1 == 0);
   }
@@ -487,10 +491,56 @@ int generate_alignment(const FEMArgs *fem_args, const char *pattern, const char 
       assert(1 == 0);
     }
   }
+  generate_MD_tag(pattern, text, mapping_start_position, cigar_uint32_t, MD_tag);
   return mapping_start_position;
 }
 
-void generate_bam1_t(uint8_t edit_distance, uint32_t mapping_start_position, int32_t reference_sequence_index, uint8_t mapping_quality, uint16_t flag, const char *query_name, uint16_t query_name_length, uint32_t *cigar, uint32_t num_cigar_operations, const char *query, const char *query_qual, int32_t query_length, bam1_t *sam_alignment) {
+void generate_MD_tag(const char *pattern, const char *text, int mapping_start_position, const kvec_t_uint32_t *cigar, kstring_t *MD_tag) {
+  int num_matches = 0;
+  const char *read = text;
+  const char *reference = pattern + mapping_start_position;
+  int read_position = 0;
+  int reference_position = 0;
+  for (int ci = 0; ci < kv_size(cigar->v); ci++) {
+    uint32_t current_cigar_uint = kv_A(cigar->v, ci);
+    uint8_t cigar_operation = bam_cigar_op(current_cigar_uint);
+    int num_cigar_operations = bam_cigar_oplen(current_cigar_uint);
+    if (cigar_operation == BAM_CMATCH) {
+      for (int opi = 0; opi < num_cigar_operations; opi++) {
+        if (reference[reference_position] == read[read_position]) {
+          // a match
+          ++num_matches;
+        } else {
+          //a mismatch
+          if (num_matches != 0) {
+            ksprintf(MD_tag, "%d", num_matches);
+            num_matches = 0;
+          }
+          ksprintf(MD_tag, "%c", reference[reference_position]);
+        }
+        ++reference_position;
+        ++read_position;
+      }
+    } else if (cigar_operation == BAM_CINS) {
+      read_position += num_cigar_operations;
+    } else if (cigar_operation == BAM_CDEL) {
+      if (num_matches != 0) {
+        ksprintf(MD_tag, "%d", num_matches);
+        num_matches = 0;
+      }
+      ksprintf(MD_tag, "%c", '^');
+      for (int opi = 0; opi < num_cigar_operations; opi++) {
+        ksprintf(MD_tag, "%c", reference[reference_position]);
+        reference_position++;
+      }
+    }
+  }
+  if (num_matches != 0) {
+    ksprintf(MD_tag, "%d", num_matches);
+  }
+}
+
+void generate_bam1_t(uint8_t edit_distance, kstring_t *MD_tag, uint32_t mapping_start_position, int32_t reference_sequence_index, uint8_t mapping_quality, uint16_t flag, const char *query_name, uint16_t query_name_length, uint32_t *cigar, uint32_t num_cigar_operations, const char *query, const char *query_qual, int32_t query_length, bam1_t *sam_alignment) {
   /*! @typedef
    *  @abstract Structure for core alignment information.
    *  @field  pos     0-based leftmost coordinate
@@ -574,4 +624,5 @@ void generate_bam1_t(uint8_t edit_distance, uint32_t mapping_start_position, int
     seq_qual[i] -= 33;
   }
   bam_aux_update_int(sam_alignment, "NM", edit_distance);
+  bam_aux_update_str(sam_alignment, "MD", ks_len(MD_tag) + 1, ks_str(MD_tag));
 }
