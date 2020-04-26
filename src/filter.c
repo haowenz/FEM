@@ -1,642 +1,223 @@
 #include "filter.h"
 
-__UTILS_HASH_VALUE
-
-void generate_optimal_prefix_qgram_for_group_seeding_new(uint32_t read_length, uint32_t gramLen, gCandidate *optCandidates, gCandidate *swapOptCandidates, uint32_t *totalCandidatesNum) {
-  uint32_t nGrams = read_length - gramLen + 1;
-  //if(nGrams > invertedLists.size()){ cerr << "Assertion Failed: not enough inverted lists" << endl; exit(1); }
-  int nSeeds = error_threshold + 2;
-  entry matrix[nSeeds][nGrams - nSeeds*gramLen + gramLen];
-  uint32_t offset;
-  uint32_t min_size, bsize, esize;
-  for (int r = 0; r < nSeeds; r++) {
-    int start = (nSeeds - r - 1)*gramLen;
-    int end = nGrams - r*gramLen;
-    for (int c = start; c < end; c++){
-      int idx = c - start;
-      offset = 0;
-      min_size = bsize = optCandidates[c].locationsNum;//invertedLists[c].second->size();
-      uint64_t min_cost = INT_MAX; 
-      for (int i = 0; i < end - start - idx; i++) {
-        esize = optCandidates[c+i].locationsNum;//invertedLists[c+i].second->size();
-        //cost estimation
-        uint64_t cost = (i == 0 ? bsize : bsize + esize);
-        //if(type == SELECT_INDEL || type == SELECT_HEURISTIC_INDEL){
-        if(esize < min_size) min_size = esize;
-        uint32_t factor = ((int)gramLen < i ? 2*gramLen : gramLen+i);
-        factor *= 10;
-        cost += min_size * (read_length + error_threshold) * error_threshold / factor;
-        //}
-        //else if(type == SELECT_SUBST) cost += 0;
-        if (r != 0) {
-          cost += matrix[r-1][matrix[r-1][i + idx].ptr].cost;
-        }
-        if (cost < min_cost) {
-          min_cost = cost;
-          offset = i;
-        }
-      }
-      matrix[r][idx].cost = min_cost;
-      matrix[r][idx].offset = offset;
-    }
-    matrix[r][end-start - 1].ptr = end-start - 1;
-    for(int i = end - start - 2; i >= 0; i--){
-      if (matrix[r][i].cost > matrix[r][matrix[r][i + 1].ptr].cost) {
-        matrix[r][i].ptr = matrix[r][i + 1].ptr;
-      } else {
-        matrix[r][i].ptr = i;
-      }
-    }
+uint32_t generate_optimal_prefix_qgram_for_group_seeding(const FEMArgs *fem_args, const Index *index, int seed_length, int read_length, Seed *seeds, Seed *optimal_seeds) {
+  uint32_t num_rows = fem_args->error_threshold + fem_args->num_additional_qgrams + 1 + 1;
+  uint32_t num_columns = read_length - (fem_args->error_threshold + fem_args->num_additional_qgrams + 1) * seed_length + 1 + 1; // check if reduce d by one
+  uint32_t M[num_rows][num_columns];
+  uint32_t D[num_rows][num_columns]; // 3 for stop, 2 for vertical move and 1 for horizontal move
+  for (uint32_t i = 1; i < num_rows; ++i) {
+    M[i][0] = index->occurrence_table_size; 
+    D[i][0] = 3;
   }
-
-  // calculate prefix lists and save it into prefixLists
-  //prefixLists.clear();
-  int s = 0;
-  for (int i = 0; i < nSeeds; i++) {
-    int r = nSeeds - i - 1;
-    s = matrix[r][s].ptr;
-    offset = matrix[r][s].offset;
-    swapOptCandidates[i].site = optCandidates[i*gramLen + s + offset].site;
-    swapOptCandidates[i].hashValue = optCandidates[i*gramLen + s + offset].hashValue;
-    swapOptCandidates[i].locationsNum = optCandidates[i*gramLen + s + offset].locationsNum;
-    *totalCandidatesNum += swapOptCandidates[i].locationsNum;
-    // prefixLists.push_back(ListIterWrapper(i*gramLen + s, i*gramLen + s + offset, invertedLists));
-    s += offset;
-  }
-  // sort prefix lists in ascending order of their sizes
-  //for (uint32_t i = 0; i < prefixLists.size(); i++) 
-  //    for (int j = i + 1; j < nSeeds; j++) 
-  //        if (prefixLists[i].size > prefixLists[j].size){
-  //            ListIterWrapper tmp = prefixLists[i];
-  //            prefixLists[i] = prefixLists[j];
-  //            prefixLists[j] = tmp;
-  //        }
-}
-
-
-
-void generate_optimal_prefix_qgram_for_variable_length_seeding_new(uint32_t read_length, uint32_t gramLen, vlCandidate *optCandidates, vlCandidate *swapOptCandidates, uint32_t *totalCandidatesNum) {
-  uint32_t nGrams = read_length - gramLen + 1;
-  //if(nGrams > invertedLists.size()){ cerr << "Assertion Failed: not enough inverted lists" << endl; exit(1); }
-  int nSeeds = error_threshold + 2;
-  entry matrix[nSeeds][nGrams - nSeeds*gramLen + gramLen];
-  uint32_t offset;
-  uint32_t min_size, bsize, esize;
-  for (int r = 0; r < nSeeds; r++) {
-    int start = (nSeeds - r - 1)*gramLen;
-    int end = nGrams - r*gramLen;
-    for (int c = start; c < end; c++) {
-      int idx = c - start;
-      offset = 0;
-      min_size = bsize = optCandidates[c].locationsNum;//invertedLists[c].second->size();
-      uint64_t min_cost = INT_MAX; 
-      for (int i = 0; i < end - start - idx; i++) {
-        esize = optCandidates[c+i].locationsNum;//invertedLists[c+i].second->size();
-        //cost estimation
-        uint64_t cost = (i == 0 ? bsize : bsize + esize);
-        //if(type == SELECT_INDEL || type == SELECT_HEURISTIC_INDEL){
-        if(esize < min_size) min_size = esize;
-        uint32_t factor = ((int)gramLen < i ? 2*gramLen : gramLen+i);
-        factor *= 10;
-        cost += min_size * (read_length + error_threshold) * error_threshold / factor;
-        //}
-        //else if(type == SELECT_SUBST) cost += 0;
-        if (r != 0) {
-          cost += matrix[r-1][matrix[r-1][i + idx].ptr].cost;
-        }
-        if (cost < min_cost) {
-          min_cost = cost;
-          offset = i;
-        }
-      }
-      matrix[r][idx].cost = min_cost;
-      matrix[r][idx].offset = offset;
-    }
-    matrix[r][end-start - 1].ptr = end - start - 1;
-    for(int i = end - start - 2; i >= 0; i--){
-      if(matrix[r][i].cost > matrix[r][matrix[r][i + 1].ptr].cost) {
-        matrix[r][i].ptr = matrix[r][i+1].ptr;
-      } else {
-        matrix[r][i].ptr = i;
-      }
-    }
-  }
-
-  // calculate prefix lists and save it into prefixLists
-  //prefixLists.clear();
-  int s = 0;
-  for (int i = 0; i < nSeeds; i++) {
-    int r = nSeeds - i - 1;
-    s = matrix[r][s].ptr;
-    offset = matrix[r][s].offset;
-    swapOptCandidates[i].startSite = optCandidates[i*gramLen + s + offset].startSite;
-    swapOptCandidates[i].endSite = optCandidates[i*gramLen + s + offset].endSite;
-    swapOptCandidates[i].hashValue = optCandidates[i*gramLen + s + offset].hashValue;
-    swapOptCandidates[i].locationsNum = optCandidates[i*gramLen + s + offset].locationsNum;
-    *totalCandidatesNum += swapOptCandidates[i].locationsNum;
-    // prefixLists.push_back(ListIterWrapper(i*gramLen + s, i*gramLen + s + offset, invertedLists));
-    s += offset;
-  }
-
-  // sort prefix lists in ascending order of their sizes
-  //for (uint32_t i = 0; i < prefixLists.size(); i++) 
-  //    for (int j = i + 1; j < nSeeds; j++) 
-  //        if (prefixLists[i].size > prefixLists[j].size){
-  //            ListIterWrapper tmp = prefixLists[i];
-  //            prefixLists[i] = prefixLists[j];
-  //            prefixLists[j] = tmp;
-  //        }
-}
-
-void generate_optimal_prefix_qgram_for_group_seeding(int kmerSize, int read_length, gCandidate *kmerCandidates, gCandidate *swapKmerCandidates, uint32_t *totalCandiNum) {
-  int row = error_threshold + 1 + num_additional_qgrams + 1;
-  int col = read_length - (error_threshold + 1 + num_additional_qgrams) * kmerSize + 1 + 1;
-  int M[row][col];
-  int direction[row][col];
-  for (int i = 1; i < row; ++i) {
-    M[i][0] = hash_table_size;
-    direction[i][0] = 3;
-  }
-  for (int i = 1; i < col; ++i) {
+  for (uint32_t i = 1; i < num_columns; ++i) {
     M[0][i] = 0;
-    direction[0][i] = 3;
+    D[0][i] = 3;
   }
-  for (int ri = 1; ri < row; ++ri) {
-    for (int ci = 1; ci < col; ++ci) {
-      int positionIndex = ci + (ri - 1) * kmerSize - 1;
-      int cmp = M[ri - 1][ci] + kmerCandidates[positionIndex].locationsNum;
-      if (cmp < M[ri][ci - 1]) {
-        M[ri][ci] = cmp;
-        direction[ri][ci] = 2;
+  for (uint32_t row = 1; row < num_rows; ++row) {
+    for (uint32_t column = 1; column < num_columns; ++column) {
+      uint32_t position = column + (row - 1) * seed_length - 1;
+      uint32_t num_total_occurrences_with_new_seed_at_position = M[row - 1][column] + seeds[position].num_positions;
+      if (num_total_occurrences_with_new_seed_at_position < M[row][column - 1]) {
+        M[row][column] = num_total_occurrences_with_new_seed_at_position;
+        D[row][column] = 2;
       } else {
-        M[ri][ci] = M[ri][ci - 1];
-        direction[ri][ci] = 1;
+        M[row][column] = M[row][column - 1];
+        D[row][column] = 1;
       }
     }
   }
-  *totalCandiNum = M[row - 1][col - 1];        
-  int count = 0;
-  int i = row - 1;
-  int j = col - 1;
-  while (1) {
-    if (direction[i][j] == 2) {
-      swapKmerCandidates[count].hashValue = kmerCandidates[j + (i - 1) * kmerSize - 1].hashValue;
-      swapKmerCandidates[count].site = kmerCandidates[j + (i - 1) * kmerSize - 1].site;
-      swapKmerCandidates[count].locationsNum = kmerCandidates[j + (i - 1) * kmerSize - 1].locationsNum;
-      ++count;
-      --i;
-    } else if (direction[i][j] == 1) {
-      --j;
-    } else {
-      break;
-    }
+  // Traceback
+  uint32_t seed_row = num_rows - 1;
+  uint32_t seed_column = num_columns - 1;
+  int num_optimal_seeds = 0;
+  while (D[seed_row][seed_column] != 3) {
+    if (D[seed_row][seed_column] == 2) {
+      optimal_seeds[num_optimal_seeds] = seeds[seed_column + (seed_row - 1) * seed_length - 1];
+      ++num_optimal_seeds;
+      --seed_row;
+    } else if (D[seed_row][seed_column] == 1) {
+      --seed_column;
+    } 
   }
+  return M[num_rows - 1][num_columns - 1];        
 }
 
-void generate_optimal_prefix_qgram_for_variable_length_seeding(int kmerSize, int read_length, vlCandidate *kmerCandidates, vlCandidate *swapKmerCandidates, uint32_t *totalCandiNum) {
-  int row = error_threshold + 1 + num_additional_qgrams + 1;
-  int col = read_length - (error_threshold + 1 + num_additional_qgrams) * kmerSize + 1 + 1;
-  int M[row][col];
-  int direction[row][col];
-  for (int i = 1; i < row; ++i) {
-    M[i][0] = hash_table_size;
-    direction[i][0] = 3;
-  }
-  for (int i = 1; i < col; ++i) {
-    M[0][i] = 0;
-    direction[0][i] = 3;
-  }
-  for (int ri = 1; ri < row; ++ri) {
-    for (int ci = 1; ci < col; ++ci) {
-      int positionIndex = ci + (ri - 1) * kmerSize - 1;
-      int cmp = M[ri - 1][ci] + kmerCandidates[positionIndex].locationsNum;
-      if (cmp < M[ri][ci - 1]) {
-        M[ri][ci] = cmp;
-        direction[ri][ci] = 2;
+void merge_kvec_t_uint64_t(const FEMArgs *fem_args, kvec_t_uint64_t *buffer1, kvec_t_uint64_t *buffer2, kvec_t_uint64_t *candidates) {
+  size_t buffer1_index = 0;
+  size_t buffer2_index = 0;
+  while (buffer1_index < kv_size(buffer1->v) || buffer2_index < kv_size(buffer2->v)) {
+    if (buffer1_index < kv_size(buffer1->v)) {
+      uint64_t buffer1_position = kv_A(buffer1->v, buffer1_index);
+      if (buffer2_index < kv_size(buffer2->v)) {
+        uint64_t buffer2_position = kv_A(buffer2->v, buffer2_index);
+        if (buffer1_position < buffer2_position) {
+          if (kv_size(candidates->v) == 0 || buffer1_position > kv_A(candidates->v, kv_size(candidates->v) - 1) + fem_args->error_threshold) {
+            kv_push(uint64_t, candidates->v, buffer1_position);
+          }
+          ++buffer1_index;
+        } else {
+          if (kv_size(candidates->v) == 0 || buffer2_position > kv_A(candidates->v, kv_size(candidates->v) - 1) + fem_args->error_threshold) {
+            kv_push(uint64_t, candidates->v, buffer2_position);
+          }
+          ++buffer2_index;
+        }
       } else {
-        M[ri][ci] = M[ri][ci - 1];
-        direction[ri][ci] = 1;
+        if (kv_size(candidates->v) == 0 || buffer1_position > kv_A(candidates->v, kv_size(candidates->v) - 1) + fem_args->error_threshold) {
+          kv_push(uint64_t, candidates->v, buffer1_position);
+        }
+        ++buffer1_index;
       }
-    }
-  }
-  *totalCandiNum = M[row - 1][col - 1];        
-  int count = 0;
-  int i = row - 1;
-  int j = col - 1;
-  while (1) {
-    if (direction[i][j] == 2) {
-      swapKmerCandidates[error_threshold + num_additional_qgrams - count].startSite = kmerCandidates[j + (i - 1) * kmerSize - 1].startSite;
-      swapKmerCandidates[error_threshold + num_additional_qgrams - count].endSite = kmerCandidates[j + (i - 1) * kmerSize - 1].endSite;
-      swapKmerCandidates[error_threshold + num_additional_qgrams - count].locationsNum = kmerCandidates[j + (i - 1) * kmerSize - 1].locationsNum;
-      ++count;
-      --i;
-    } else if (direction[i][j] == 1) {
-      --j;
     } else {
-      break;
+      uint64_t buffer2_position = kv_A(buffer2->v, buffer2_index);
+      if (kv_size(candidates->v) == 0 || buffer2_position > kv_A(candidates->v, kv_size(candidates->v) - 1) + fem_args->error_threshold) {
+        kv_push(uint64_t, candidates->v, buffer2_position);
+      }
+      ++buffer2_index;
     }
   }
 }
 
-uint32_t generate_group_seeding_candidates(const Read *read, const int is_reverse_complement, uint32_t **candidates, uint32_t **swap_candidates, uint32_t *candidatesNumMax, TwoTuple **candis, TwoTuple **tempCandis, uint32_t *tupleNum, uint32_t *num_candidates_without_additonal_qgram_filter) {
-  const uint8_t *bases = read->bases;
-  if (is_reverse_complement == 1) {
-    bases = read->rc_bases;
-  }
-
-  //dp for seed selection start
-  int scanSize = read->length - kmer_size + 1;
-  uint32_t tempCandidateNums[scanSize];
-  int tempHashValues[scanSize];
-
-  int mask = max_hash_value;
-  int Nflag = 1;
-  int hashVal = -1;
-  int NNum = 0;
-  for (int ri = 0; ri < scanSize; ++ri) {
-    if (Nflag == 1) {
-      hashVal = hashValue(bases + ri, kmer_size);
-    } else {
-      int nextBase = (int) bases[ri + kmer_size - 1];
-      if (nextBase == 4) {
-        ++NNum;
-        if (NNum > error_threshold) {
-          return 0;
-        }
-        hashVal = -1;
-      }else{
-        hashVal = ((hashVal << 2) & mask) + nextBase;
-      }
-    }
-    tempHashValues[ri] = hashVal;
-    //deal with N in read
-    if (hashVal != -1) {
-      Nflag = 0;
-      tempCandidateNums[ri] = lookup_table[hashVal+1] - lookup_table[hashVal];
-    } else {
-      Nflag = 1;
-      tempCandidateNums[ri] = 0;
-    }
-  }
-
-  int coveredNum = kmer_size/step_size;
-  if(kmer_size%step_size>0){
-    coveredNum++;
-  }
-
-  int minTotalSubSeedNum = (read->length - kmer_size + 1 - step_size)/step_size;
-  if (coveredNum * (error_threshold + 1 +num_additional_qgrams) > minTotalSubSeedNum) {
-    return 0;
-  }
-
-  uint32_t totalCandidatesCount = 0;
-  *num_candidates_without_additonal_qgram_filter = 0;
-  uint32_t count = 0;
-  for(int si=0;si<step_size;++si){
-    int totalSubSeedNum = (read->length - kmer_size + 1 - si)/step_size;
-    gCandidate optCandidates[totalSubSeedNum];
-    gCandidate swapOptCandidates[error_threshold + 1 + num_additional_qgrams];
-    for(int k=0;k<totalSubSeedNum;++k){
-      optCandidates[k].site = k*step_size + si; 
-      optCandidates[k].hashValue = tempHashValues[si+k*step_size];
-      optCandidates[k].locationsNum = tempCandidateNums[si+k*step_size];
-    }
-    uint32_t totalPositionNum = 0;
-    generate_optimal_prefix_qgram_for_group_seeding(coveredNum, totalSubSeedNum, optCandidates, swapOptCandidates,&totalPositionNum);
-
-    //generate_optimal_prefix_qgram_for_group_seeding_new(totalSubSeedNum,coveredNum,optCandidates,swapOptCandidates,&totalPositionNum);
-
-    totalCandidatesCount += totalPositionNum;
-
-    *num_candidates_without_additonal_qgram_filter = totalCandidatesCount;
-    qsort(swapOptCandidates, error_threshold + 1 + num_additional_qgrams, sizeof(gCandidate), compare_gCandidate);
-    if (totalPositionNum > *tupleNum) {
-      *tupleNum = totalPositionNum + (V_CPU_WIDE - (totalPositionNum % V_CPU_WIDE));
-      TwoTuple* t_candis = (TwoTuple*) realloc(*candis, sizeof(TwoTuple) * (*tupleNum));
-      assert(t_candis);
-      *candis = t_candis;
-      TwoTuple* t_tempCandis = (TwoTuple*) realloc(*tempCandis, sizeof(TwoTuple) * (*tupleNum));
-      assert(t_tempCandis);
-      *tempCandis = t_tempCandis;
-    }
-    uint32_t locationNum = swapOptCandidates[0].locationsNum;
-    uint32_t *locations =  occurrence_table + lookup_table[swapOptCandidates[0].hashValue];
-    for (uint32_t pi = 0; pi < locationNum; ++pi) {
-      TwoTuple tmpPosCount;
-      tmpPosCount.a = locations[pi] - swapOptCandidates[0].site;
-      tmpPosCount.b = 1;
-      (*candis)[pi] = tmpPosCount;
-    }
-    uint32_t candiSize = locationNum;
-    for (int ki = 1; ki < error_threshold + 1 + num_additional_qgrams; ++ki) {
-      locations = occurrence_table + lookup_table[swapOptCandidates[ki].hashValue];
-      locationNum = swapOptCandidates[ki].locationsNum;
-
-      uint32_t tempIndex = 0;
-      uint32_t ci = 0;
-      uint32_t j = 0;
-      int additionalPrefix = ki - error_threshold;
-
-      while (ci < candiSize) {
-        uint32_t location = locations[j] - swapOptCandidates[ki].site;
-
-        int detel = (*candis)[ci].a - location;
-        if (j < locationNum && detel >error_threshold) {
-          /*if this is dealing with the last one,
-           ** then there is no need to do this.*/
-          if (additionalPrefix <= 0) {
-            TwoTuple tmpPosCount;
-            tmpPosCount.a = location;
-            tmpPosCount.b = 1;
-            (*tempCandis)[tempIndex++] = tmpPosCount;
-          }
-          ++j;
-        } else if (j == locationNum || (-detel) > error_threshold) {
-          if (additionalPrefix <= 0 || (*candis)[ci].b > num_additional_qgrams) {
-            (*tempCandis)[tempIndex++] = (*candis)[ci];
-          }
-          ++ci;
-        } else {
-          if (detel == 0) {
-            TwoTuple tmpPosCount;
-            tmpPosCount.a = location;
-            tmpPosCount.b = (*candis)[ci].b + 1;
-            (*tempCandis)[tempIndex++] = tmpPosCount;
-            ++ci;
-            ++j;
-          } else if (detel > 0) {
-            TwoTuple tmpPosCount;
-            tmpPosCount.a = location;
-            tmpPosCount.b = 2;
-            (*tempCandis)[tempIndex++] = tmpPosCount;
-            ++j;
+void merge_candidate_locations(const FEMArgs *fem_args, const Index *index, const Seed *seeds, size_t num_seeds, kvec_t_uint64_t *buffer1, kvec_t_uint64_t *buffer2) {
+  for (size_t si = 0; si < num_seeds; ++si) {
+    size_t buffer1_index = 0;
+    size_t seed_occurrence_index = 0;
+    uint64_t *seed_occurrence_list = get_seed_occurrences(index, seeds[si].hash_value);
+    while (buffer1_index < kv_size(buffer1->v) || (si != num_seeds - 1 && seed_occurrence_index < seeds[si].num_positions)) { // TODO: for the second case I have to push back one extra
+      if (buffer1_index < kv_size(buffer1->v)) {
+        uint64_t buffer1_position = kv_A(buffer1->v, buffer1_index);
+        if (seed_occurrence_index < seeds[si].num_positions) {
+          if ((uint32_t)seed_occurrence_list[seed_occurrence_index] < seeds[si].start_position) {
+            ++seed_occurrence_index;
           } else {
-            TwoTuple tmpPosCount;
-            tmpPosCount.a = (*candis)[ci].a;
-            tmpPosCount.b = (*candis)[ci].b + 1;
-            (*tempCandis)[tempIndex++] = tmpPosCount;
-            ++ci;
+            uint64_t seed_position = seed_occurrence_list[seed_occurrence_index] - seeds[si].start_position;
+            if (seed_position <= buffer1_position) {
+              kv_push(uint64_t, buffer2->v, seed_position);
+              ++seed_occurrence_index;
+            } else {
+              kv_push(uint64_t, buffer2->v, buffer1_position);
+              ++buffer1_index;
+            }
           }
+        } else {
+          kv_push(uint64_t, buffer2->v, buffer1_position);
+          ++buffer1_index;
         }
-      }
-      /* if this is dealing with the last one,
-       ** then there is no need to do this.*/
-      while (additionalPrefix <= 0 && j < locationNum) {
-        uint32_t location = locations[j] - swapOptCandidates[ki].site;
-        TwoTuple tmpPosCount;
-        tmpPosCount.a = location;
-        tmpPosCount.b = 1;
-        (*tempCandis)[tempIndex++] = tmpPosCount;
-        ++j;
-      }
-      TwoTuple *tmpTuple = *candis;
-      *candis = *tempCandis;
-      *tempCandis = tmpTuple;
-      candiSize = tempIndex;
-    }
-
-    /* we have to initialize maxCandiNum with a constant before we use this function.
-     ** I think maybe 4096 is OK.*/
-    for (uint32_t i = 0; i < candiSize; ++i) {
-      if ((*candis)[i].b > num_additional_qgrams) {
-        if ((*candis)[i].a >= (uint32_t)error_threshold) {
-          uint32_t location = (*candis)[i].a - error_threshold;
-          (*candidates)[count++] = location;
-          if (count >= *candidatesNumMax) {
-            *candidatesNumMax= count * 2;
-            uint32_t *t_candidates = (uint32_t*) realloc(*candidates, sizeof(uint32_t) * count * 2);
-            assert(t_candidates);
-            *candidates = t_candidates;
-          }
+      } else {
+        if ((uint32_t)seed_occurrence_list[seed_occurrence_index] >= seeds[si].start_position) {
+          uint64_t seed_position = seed_occurrence_list[seed_occurrence_index] - seeds[si].start_position;
+          kv_push(uint64_t, buffer2->v, seed_position);
         }
+        ++seed_occurrence_index;
       }
     }
-
+    kv_swap(uint64_t, buffer1->v, buffer2->v);
+    kv_clear(buffer2->v);
   }
-  return count;
 }
 
-uint32_t generate_variable_length_seeding_candidates(const Read *read, const int is_reverse_complement, uint32_t **candidates, uint32_t **swap_candidates, uint32_t *candidatesNumMax, TwoTuple **candis, TwoTuple **tempCandis, uint32_t *tupleNum, uint32_t *num_candidates_without_additonal_qgram_filter) {
-  const uint8_t *bases = read->bases;
-  if (is_reverse_complement == 1) {
-    bases = read->rc_bases;
-  }
-
-  //dp for seed selection start
-  int seedLengthMin = kmer_size + step_size - 1;
-  int scanSize = read->length - kmer_size + 1;
-
-  if (seedLengthMin * (error_threshold + 1 + num_additional_qgrams) > read->length) {
-    return 0;
-  }
-
-  uint32_t tempCandidateNums[scanSize];
-  int tempHashValues[scanSize];
-
-  int mask = max_hash_value;
-  int Nflag = 1;
-  int hashVal = -1;
-  int NNum = 0;
-  for (int ri = 0; ri < scanSize; ++ri) {
-    if (Nflag == 1) {
-      hashVal = hashValue(bases + ri, kmer_size);
-    } else {
-      int nextBase = (int) bases[ri + kmer_size - 1];
-      if (nextBase == 4) {
-        ++NNum;
-        if (NNum > error_threshold) {
-          return 0;
-        }
-        hashVal = -1;
-      }else{
-        hashVal = ((hashVal << 2) & mask) + nextBase;
+void additional_qgram_filter(const FEMArgs *fem_args, kvec_t_uint64_t *buffer, kvec_t_uint64_t *candidates) {
+  for (size_t ci = 0; ci < kv_size(buffer->v); ++ci) {
+    size_t num_candidates_in_range = 1;
+    while (ci + num_candidates_in_range < kv_size(buffer->v) && kv_A(buffer->v, ci + num_candidates_in_range) <= kv_A(buffer->v, ci) + fem_args->error_threshold) {
+      ++num_candidates_in_range;
+      if (num_candidates_in_range > fem_args->num_additional_qgrams) { 
+        break;
       }
     }
-    tempHashValues[ri] = hashVal;
-    //deal with N in read
-    if (hashVal != -1) {
-      Nflag = 0;
-      tempCandidateNums[ri] = lookup_table[hashVal+1] - lookup_table[hashVal];
-    } else {
-      Nflag = 1;
-      tempCandidateNums[ri] = 0;
+    if (num_candidates_in_range > fem_args->num_additional_qgrams) { 
+      kv_push(uint64_t, candidates->v, kv_A(buffer->v, ci));
     }
   }
-  vlCandidate optCandidates[scanSize];
-  vlCandidate swapOptCandidates[error_threshold+num_additional_qgrams+1];
+}
 
-  uint32_t estimatedLocationNum[scanSize];
-  memset(estimatedLocationNum,0,sizeof(int)*scanSize);
-  for(int i=0;i<read->length-kmer_size+1-step_size+1;++i){
-    estimatedLocationNum[i]=tempCandidateNums[i];
-    for(int j=1;j<step_size;++j){
-      estimatedLocationNum[i]+=tempCandidateNums[i+j];
+void remove_out_ranged_candidates(const FEMArgs *fem_args, uint32_t read_length, const SequenceBatch *reference_sequence_batch, kvec_t_uint64_t *buffer, kvec_t_uint64_t *candidates) {
+  for (size_t i = 0; i < kv_size(buffer->v); ++i) {
+    uint64_t candidate = kv_A(buffer->v, i);
+    uint32_t reference_sequence_index = candidate >> 32;
+    uint32_t reference_sequence_length = get_sequence_length_from_sequence_batch_at(reference_sequence_batch, reference_sequence_index);
+    uint32_t reference_candidate_position = (uint32_t)candidate;
+    assert(reference_candidate_position < reference_sequence_length);
+    if (reference_candidate_position >= (uint32_t)(fem_args->error_threshold) && reference_candidate_position + read_length + fem_args->error_threshold < reference_sequence_length) {
+      kv_push(uint64_t, candidates->v, candidate - fem_args->error_threshold);
     }
-    optCandidates[i].startSite = i;
-    optCandidates[i].endSite = i + seedLengthMin - 1;
-    optCandidates[i].locationsNum = estimatedLocationNum[i];
+  }
+}
+
+uint32_t generate_group_seeding_candidates(const FEMArgs *fem_args, const SequenceBatch *read_sequence_batch, size_t read_index, uint8_t direction, const SequenceBatch *reference_sequence_batch, const Index *index, kvec_t_uint64_t *buffer1, kvec_t_uint64_t *buffer2, kvec_t_uint64_t *candidates, uint32_t *num_candidates_without_additonal_qgram_filter) {
+  //const uint8_t *bases = read->bases;
+  //if (is_reverse_complement == 1) {
+  //  bases = read->rc_bases;
+  //}
+  kv_clear(buffer1->v);
+  kv_clear(buffer2->v);
+  kv_clear(candidates->v);
+
+  uint32_t read_length = get_sequence_length_from_sequence_batch_at(read_sequence_batch, read_index);
+  const char *read_sequence = get_sequence_from_sequence_batch_at(read_sequence_batch, read_index);
+  if (direction == NEGATIVE_DIRECTION) {
+    read_sequence = get_negative_sequence_from_sequence_batch_at(read_sequence_batch, read_index);
   }
 
-  uint32_t totalPositionNum = 0;
-
-  //generate_optimal_prefix_qgram_for_variable_length_seeding_new(read->length,seedLengthMin,optCandidates, swapOptCandidates, &totalPositionNum);
-
-  generate_optimal_prefix_qgram_for_variable_length_seeding(seedLengthMin, read->length, optCandidates, swapOptCandidates,&totalPositionNum);
-  if(totalPositionNum==0){
+  // Check if we can select enough seeds in the read
+  int seed_length_in_seed_group = fem_args->kmer_size / fem_args->step_size;
+  if (fem_args->kmer_size % fem_args->step_size > 0) {
+    seed_length_in_seed_group++;
+  }
+  int num_seeds_in_read = (int)read_length - fem_args->kmer_size + 1;
+  assert(num_seeds_in_read > 0);
+  int min_num_seeds_in_seed_group = num_seeds_in_read / fem_args->step_size;
+  if (fem_args->error_threshold + 1 + fem_args->num_additional_qgrams > min_num_seeds_in_seed_group) {
+    // read is too short to be mapped
     return 0;
   }
 
-  swapOptCandidates[0].startSite = 0;
-  swapOptCandidates[error_threshold + num_additional_qgrams].endSite = read->length - 1;
-  for (int ki = 1; ki < error_threshold + 1 + num_additional_qgrams; ++ki){
-    if(swapOptCandidates[ki].locationsNum>=swapOptCandidates[ki-1].locationsNum){
-      swapOptCandidates[ki].startSite = swapOptCandidates[ki - 1].endSite + 1;
-    }else{
-      swapOptCandidates[ki - 1].endSite = swapOptCandidates[ki].startSite - 1;
-    }
+  // dp for seed selection start
+  // Generate seeds
+  uint32_t seed_hash_values[num_seeds_in_read];
+  //uint32_t seed_frequencies[num_seeds_in_read];
+  int num_seeds_with_ambiguous_base = 0;
+  hash_all_seeds_in_sequence(0, num_seeds_in_read, fem_args->kmer_size, read_sequence, read_length, &num_seeds_with_ambiguous_base, seed_hash_values);
+  if (num_seeds_with_ambiguous_base > fem_args->error_threshold) {
+    return 0;
   }
+  //for (int si = 0; si < num_seeds_in_read; ++si) {
+  //  seed_frequencies[si] = index->lookup_table[seed_hash_values[si] + 1] - lookup_table[seed_hash_values[si]];
+  //}
 
-  uint32_t totalCandidatesCount = 0;
+  // Run seeding algorithm in each seed group
   *num_candidates_without_additonal_qgram_filter = 0;
-  int totalKmerNum=(error_threshold+1+num_additional_qgrams)*(step_size);
-  SubSeed minSubSeeds[totalKmerNum];
-  int seedNum = error_threshold+1+num_additional_qgrams;
-  for(int ei=0; ei<error_threshold+1+num_additional_qgrams; ++ei){
-    for(int si=0;si<step_size;++si){
-      minSubSeeds[ei*step_size+si].site=swapOptCandidates[ei].startSite+si;
-      minSubSeeds[ei*step_size+si].locationNum=tempCandidateNums[minSubSeeds[ei*step_size+si].site];
+  //uint32_t num_candidates = 0;
+  for (int si = 0; si < fem_args->step_size; ++si) {
+    // Generate optimal prefix q-gram
+    int num_seeds_in_current_seed_group = (read_length - fem_args->kmer_size + 1 - si) / fem_args->step_size;
+    Seed seeds_in_current_seed_group[num_seeds_in_current_seed_group];
+    Seed optimal_seeds_in_current_seed_group[fem_args->error_threshold + 1 + fem_args->num_additional_qgrams];
+    for (int k = 0; k < num_seeds_in_current_seed_group; ++k) {
+      int seed_index_in_read = si + k * fem_args->step_size;
+      seeds_in_current_seed_group[k].hash_value = seed_hash_values[seed_index_in_read];
+      seeds_in_current_seed_group[k].start_position = seed_index_in_read;
+      seeds_in_current_seed_group[k].end_position = seed_index_in_read + fem_args->kmer_size;
+      seeds_in_current_seed_group[k].num_positions = get_seed_frequency(index, seeds_in_current_seed_group[k].hash_value);
     }
-    int seedLength = swapOptCandidates[ei].endSite - swapOptCandidates[ei].startSite + 1;
-    int endIndex = step_size-1;
-    for(int sj=step_size;sj<seedLength-kmer_size+1;++sj){
-      int index = sj%step_size;
-      if(tempCandidateNums[swapOptCandidates[ei].startSite + sj]<(uint32_t)minSubSeeds[ei*step_size+index].locationNum){
-        minSubSeeds[ei*step_size+index].site=swapOptCandidates[ei].startSite + sj;
-        minSubSeeds[ei*step_size+index].locationNum=tempCandidateNums[minSubSeeds[ei*step_size+index].site];
-        endIndex=sj;
-      }
-    }
-    if(step_size>1){
-      if(endIndex>step_size -1 && ei<error_threshold+num_additional_qgrams){
-        swapOptCandidates[ei+1].startSite = swapOptCandidates[ei].startSite + endIndex+ kmer_size;
-      }
-    }
-    for(int sk=0;sk<step_size;++sk){
-      totalCandidatesCount+=minSubSeeds[ei*step_size+sk].locationNum;
+    *num_candidates_without_additonal_qgram_filter += generate_optimal_prefix_qgram_for_group_seeding(fem_args, index, seed_length_in_seed_group, num_seeds_in_current_seed_group, seeds_in_current_seed_group, optimal_seeds_in_current_seed_group);
+    // Sort q-grams on their frequency
+    qsort(optimal_seeds_in_current_seed_group, fem_args->error_threshold + 1 + fem_args->num_additional_qgrams, sizeof(Seed), compare_seed);
+    // Filter seeds with additional q-gram
+    kv_clear(buffer1->v);
+    kv_clear(buffer2->v);
+    merge_candidate_locations(fem_args, index, optimal_seeds_in_current_seed_group, fem_args->error_threshold + 1 + fem_args->num_additional_qgrams, buffer1, buffer2);
+    additional_qgram_filter(fem_args, buffer1, buffer2);
+    kv_swap(uint64_t, buffer1->v, candidates->v);
+    kv_clear(candidates->v);
+    merge_kvec_t_uint64_t(fem_args, buffer1, buffer2, candidates);
+  }
+  for (size_t i = 1; i < kv_size(candidates->v); ++i) {
+    if (kv_A(candidates->v, i - 1) == kv_A(candidates->v, i)) {
+      fprintf(stderr, "%lu\n", kv_A(candidates->v, i));
     }
   }
-
-  *num_candidates_without_additonal_qgram_filter = totalCandidatesCount;
-  if (totalCandidatesCount > *tupleNum) {
-    *tupleNum = totalCandidatesCount + (V_CPU_WIDE - (totalCandidatesCount % V_CPU_WIDE));
-    TwoTuple* t_candis = (TwoTuple*) realloc(*candis, sizeof(TwoTuple) * (*tupleNum));
-    assert(t_candis);
-    *candis = t_candis;
-    TwoTuple* t_tempCandis = (TwoTuple*) realloc(*tempCandis, sizeof(TwoTuple) * (*tupleNum));
-    assert(t_tempCandis);
-    *tempCandis = t_tempCandis;
-  }
-
-  uint32_t candiSize = 0;
-  qsort(minSubSeeds, (error_threshold+num_additional_qgrams+1)*step_size, sizeof(SubSeed), compare_sub_seed);
-  uint32_t locationNum = minSubSeeds[0].locationNum;
-  uint32_t *locations=occurrence_table + lookup_table[tempHashValues[minSubSeeds[0].site]];
-  for(uint32_t i=0;i<locationNum;++i){
-    uint32_t location = locations[i] - minSubSeeds[0].site;
-    TwoTuple tmpPosCount;
-    tmpPosCount.a = location;
-    tmpPosCount.b = 1;
-    (*candis)[candiSize++] = tmpPosCount;
-  }
-
-  for(int ei = 0; ei<seedNum; ++ei){
-    for(int si=0;si<step_size;++si){
-      if(ei==0&&si==0){
-        continue;
-      }
-      locationNum = minSubSeeds[ei*step_size+si].locationNum;
-      locations =  occurrence_table + lookup_table[tempHashValues[minSubSeeds[ei*step_size+si].site]];
-
-      uint32_t tempIndex = 0;
-      uint32_t ci = 0;
-      uint32_t j = 0;
-      int additionalPrefix =  ei * step_size+si- ((error_threshold+1+num_additional_qgrams) * step_size );
-
-      while (ci < candiSize) {
-        uint32_t location = locations[j] - minSubSeeds[ei*step_size+si].site;
-        //__builtin_prefetch((const void*) (locations + ((ci + 2))), 0, 0);
-        int detel = (*candis)[ci].a - location;
-        if (j < locationNum && detel >error_threshold) {
-          /*if this is dealing with the last one,
-           ** then there is no need to do this.*/
-          if (additionalPrefix <= 0) {
-            TwoTuple tmpPosCount;
-            tmpPosCount.a = location;
-            tmpPosCount.b = 1;
-            (*tempCandis)[tempIndex++] = tmpPosCount;
-          }
-          ++j;
-        } else if (j == locationNum || (-detel) > error_threshold) {
-          if (additionalPrefix <= 0 || (*candis)[ci].b > num_additional_qgrams) {
-            (*tempCandis)[tempIndex++] = (*candis)[ci];
-          }
-          ++ci;
-        } else {
-          if (detel == 0) {
-            TwoTuple tmpPosCount;
-            tmpPosCount.a = location;
-            tmpPosCount.b = (*candis)[ci].b + 1;
-            (*tempCandis)[tempIndex++] = tmpPosCount;
-            ++ci;
-            ++j;
-          } else if (detel > 0) {
-            TwoTuple tmpPosCount;
-            tmpPosCount.a = location;
-            tmpPosCount.b = 2;
-            (*tempCandis)[tempIndex++] = tmpPosCount;
-            ++j;
-          } else {
-            TwoTuple tmpPosCount;
-            tmpPosCount.a = (*candis)[ci].a;
-            tmpPosCount.b = (*candis)[ci].b + 1;
-            (*tempCandis)[tempIndex++] = tmpPosCount;
-            ++ci;
-          }
-        }
-      }
-      /*if this is dealing with the last one,
-       ** then there is no need to do this.*/
-      while (additionalPrefix <= 0 && j < locationNum) {
-        uint32_t location = locations[j] - minSubSeeds[ei*step_size+si].site;
-        TwoTuple tmpPosCount;
-        tmpPosCount.a = location;
-        tmpPosCount.b = 1;
-        (*tempCandis)[tempIndex++] = tmpPosCount;
-        ++j;
-      }
-      TwoTuple *tmpTuple = *candis;
-      *candis = *tempCandis;
-      *tempCandis = tmpTuple;
-      candiSize = tempIndex;
-    }
-  }
-
-  /*we have to initialize maxCandiNum with a constant before we use this function.
-   ** I think maybe 4096 is OK.*/
-  uint32_t count = 0;
-  for (uint32_t i = 0; i < candiSize; ++i) {
-    if ((*candis)[i].b > num_additional_qgrams) {
-      if ((*candis)[i].a >= (uint32_t)error_threshold&& (*candis)[i].a<reference.lookupTable[reference.refNum] ) {
-        uint32_t location = (*candis)[i].a - error_threshold;
-        (*candidates)[count++] = location;
-        if (count >= *candidatesNumMax) {
-          *candidatesNumMax= count * 2;
-          uint32_t *t_candidates = (uint32_t*) realloc(*candidates, sizeof(uint32_t) * count * 2);
-          assert(t_candidates);
-          *candidates = t_candidates;
-        }
-      }
-    }
-  }
-  return count;
+  kv_swap(uint64_t, buffer1->v, candidates->v);
+  kv_clear(candidates->v);
+  remove_out_ranged_candidates(fem_args, read_length, reference_sequence_batch, buffer1, candidates);
+  return kv_size(candidates->v);
 }

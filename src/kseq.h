@@ -1,23 +1,27 @@
 /* The MIT License
- Copyright (c) 2008, 2009, 2011 Attractive Chaos <attractor@live.co.uk>
- Permission is hereby granted, free of charge, to any person obtaining
- a copy of this software and associated documentation files (the
- "Software"), to deal in the Software without restriction, including
- without limitation the rights to use, copy, modify, merge, publish,
- distribute, sublicense, and/or sell copies of the Software, and to
- permit persons to whom the Software is furnished to do so, subject to
- the following conditions:
- The above copyright notice and this permission notice shall be
- included in all copies or substantial portions of the Software.
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- SOFTWARE.
- */
+
+   Copyright (c) 2008, 2009, 2011 Attractive Chaos <attractor@live.co.uk>
+
+   Permission is hereby granted, free of charge, to any person obtaining
+   a copy of this software and associated documentation files (the
+   "Software"), to deal in the Software without restriction, including
+   without limitation the rights to use, copy, modify, merge, publish,
+   distribute, sublicense, and/or sell copies of the Software, and to
+   permit persons to whom the Software is furnished to do so, subject to
+   the following conditions:
+
+   The above copyright notice and this permission notice shall be
+   included in all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+   NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+   BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+*/
 
 /* Last Modified: 05MAR2012 */
 
@@ -33,6 +37,14 @@
 #define KS_SEP_LINE  2 // line separator: "\n" (Unix) or "\r\n" (Windows)
 #define KS_SEP_MAX   2
 
+#ifndef klib_unused
+#if (defined __clang__ && __clang_major__ >= 3) || (defined __GNUC__ && __GNUC__ >= 3)
+#define klib_unused __attribute__ ((__unused__))
+#else
+#define klib_unused
+#endif
+#endif /* klib_unused */
+
 #define __KS_TYPE(type_t)						\
 	typedef struct __kstream_t {				\
 		unsigned char *buf;						\
@@ -40,6 +52,7 @@
 		type_t f;								\
 	} kstream_t;
 
+#define ks_err(ks) ((ks)->end == -1)
 #define ks_eof(ks) ((ks)->is_eof && (ks)->begin >= (ks)->end)
 #define ks_rewind(ks) ((ks)->is_eof = (ks)->begin = (ks)->end = 0)
 
@@ -60,13 +73,15 @@
 	}
 
 #define __KS_GETC(__read, __bufsize)						\
-	static inline int ks_getc(kstream_t *ks)				\
+	static inline klib_unused int ks_getc(kstream_t *ks)	\
 	{														\
+		if (ks_err(ks)) return -3;							\
 		if (ks->is_eof && ks->begin >= ks->end) return -1;	\
 		if (ks->begin >= ks->end) {							\
 			ks->begin = 0;									\
 			ks->end = __read(ks->f, ks->buf, __bufsize);	\
 			if (ks->end == 0) { ks->is_eof = 1; return -1;}	\
+			if (ks->end == -1) { ks->is_eof = 1; return -3;}\
 		}													\
 		return (int)ks->buf[ks->begin++];					\
 	}
@@ -91,11 +106,13 @@ typedef struct __kstring_t {
 		str->l = append? str->l : 0;									\
 		for (;;) {														\
 			int i;														\
+			if (ks_err(ks)) return -3;									\
 			if (ks->begin >= ks->end) {									\
 				if (!ks->is_eof) {										\
 					ks->begin = 0;										\
 					ks->end = __read(ks->f, ks->buf, __bufsize);		\
 					if (ks->end == 0) { ks->is_eof = 1; break; }		\
+					if (ks->end == -1) { ks->is_eof = 1; return -3; }	\
 				} else break;											\
 			}															\
 			if (delimiter == KS_SEP_LINE) { \
@@ -160,28 +177,29 @@ typedef struct __kstring_t {
 	}
 
 /* Return value:
- >=0  length of the sequence (normal)
- -1   end-of-file
- -2   truncated quality string
+   >=0  length of the sequence (normal)
+   -1   end-of-file
+   -2   truncated quality string
+   -3   error reading stream
  */
 #define __KSEQ_READ(SCOPE) \
 	SCOPE int kseq_read(kseq_t *seq) \
 	{ \
-		int c; \
+		int c,r; \
 		kstream_t *ks = seq->f; \
 		if (seq->last_char == 0) { /* then jump to the next header line */ \
-			while ((c = ks_getc(ks)) != -1 && c != '>' && c != '@'); \
-			if (c == -1) return -1; /* end of file */ \
+			while ((c = ks_getc(ks)) >= 0 && c != '>' && c != '@'); \
+			if (c < 0) return c; /* end of file or error*/ \
 			seq->last_char = c; \
 		} /* else: the first header char has been read in the previous call */ \
 		seq->comment.l = seq->seq.l = seq->qual.l = 0; /* reset all members */ \
-		if (ks_getuntil(ks, 0, &seq->name, &c) < 0) return -1; /* normal exit: EOF */ \
+		if ((r=ks_getuntil(ks, 0, &seq->name, &c)) < 0) return r;  /* normal exit: EOF or error */ \
 		if (c != '\n') ks_getuntil(ks, KS_SEP_LINE, &seq->comment, 0); /* read FASTA/Q comment */ \
 		if (seq->seq.s == 0) { /* we can do this in the loop below, but that is slower */ \
 			seq->seq.m = 256; \
 			seq->seq.s = (char*)malloc(seq->seq.m); \
 		} \
-		while ((c = ks_getc(ks)) != -1 && c != '>' && c != '+' && c != '@') { \
+		while ((c = ks_getc(ks)) >= 0 && c != '>' && c != '+' && c != '@') { \
 			if (c == '\n') continue; /* skip empty lines */ \
 			seq->seq.s[seq->seq.l++] = c; /* this is safe: we always have enough space for 1 char */ \
 			ks_getuntil2(ks, KS_SEP_LINE, &seq->seq, 0, 1); /* read the rest of the line */ \
@@ -198,9 +216,10 @@ typedef struct __kstring_t {
 			seq->qual.m = seq->seq.m; \
 			seq->qual.s = (char*)realloc(seq->qual.s, seq->qual.m); \
 		} \
-		while ((c = ks_getc(ks)) != -1 && c != '\n'); /* skip the rest of '+' line */ \
+		while ((c = ks_getc(ks)) >= 0 && c != '\n'); /* skip the rest of '+' line */ \
 		if (c == -1) return -2; /* error: no quality string */ \
-		while (ks_getuntil2(ks, KS_SEP_LINE, &seq->qual, 0, 1) >= 0 && seq->qual.l < seq->seq.l); \
+		while ((c = ks_getuntil2(ks, KS_SEP_LINE, &seq->qual, 0, 1) >= 0 && seq->qual.l < seq->seq.l)); \
+		if (c == -3) return -3; /* stream error */ \
 		seq->last_char = 0;	/* we have not come to the next header line */ \
 		if (seq->seq.l != seq->qual.l) return -2; /* error: qual string is of a different length */ \
 		return seq->seq.l; \
@@ -211,6 +230,7 @@ typedef struct __kstring_t {
 		kstring_t name, comment, seq, qual;		\
 		int last_char;							\
 		kstream_t *f;							\
+		uint64_t id;                            \
 	} kseq_t;
 
 #define KSEQ_INIT2(SCOPE, type_t, __read)		\
@@ -219,7 +239,7 @@ typedef struct __kstring_t {
 	__KSEQ_BASIC(SCOPE, type_t)					\
 	__KSEQ_READ(SCOPE)
 
-#define KSEQ_INIT(type_t, __read) KSEQ_INIT2(static, type_t, __read)
+#define KSEQ_INIT(type_t, __read) KSEQ_INIT2(static klib_unused, type_t, __read)
 
 #define KSEQ_DECLARE(type_t) \
 	__KS_TYPE(type_t) \

@@ -1,0 +1,3 @@
+[submodule "extern/htslib"]
+	path = extern/htslib
+	url = https://github.com/samtools/htslib.git
