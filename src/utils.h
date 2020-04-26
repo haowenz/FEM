@@ -15,6 +15,7 @@
 #include <pthread.h>
 #include <mm_malloc.h>
 
+#include "htslib/sam.h"
 #include "kvec.h"
 
 #define POSITIVE_DIRECTION 0
@@ -35,6 +36,10 @@ typedef struct {
 typedef struct {
   kvec_t(char) v;
 } kvec_t_char;
+
+typedef struct {
+  kvec_t(bam1_t*) v;
+} kvec_t_bam1_t_ptr;
 
 typedef struct {
   uint8_t direction:1, edit_distance:4, :3/* Reserved */;

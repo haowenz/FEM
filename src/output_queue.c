@@ -10,28 +10,13 @@ void initialize_output_queue(const char *output_file_path, const SequenceBatch *
   pthread_mutex_init(&(output_queue->queue_mutex), NULL);
   pthread_cond_init(&(output_queue->pro_cond), NULL);
   pthread_cond_init(&(output_queue->con_cond), NULL);
-  output_queue->sam_alignments = (bam1_t**)malloc(output_queue->max_size * sizeof(bam1_t*));
-  //output_queue->output_kstrings = (kstring_t*)malloc(output_queue->max_size * sizeof(kstring_t));
+  output_queue->sam_alignment_kvec = (kvec_t_bam1_t_ptr*)malloc(output_queue->max_size * sizeof(kvec_t_bam1_t_ptr));
   for (size_t i = 0; i < output_queue->max_size; ++i) {
-    //output_queue->sam_alignments[i].l_data = 0;
-    //output_queue->sam_alignments[i].m_data = 0;
-    //output_queue->sam_alignments[i].data = NULL;
-    //bam_set_mempolicy(&(output_queue->sam_alignments[i]), BAM_USER_OWNS_STRUCT|BAM_USER_OWNS_DATA);
-    output_queue->sam_alignments[i] = bam_init1();
-    assert(output_queue->sam_alignments[i]);
-    //bam_set_mempolicy(output_queue->sam_alignments[i], BAM_USER_OWNS_STRUCT|BAM_USER_OWNS_DATA);
-    //(output_queue->output_kstrings)[i].l = 0;
-    //(output_queue->output_kstrings)[i].m = 0;
-    //(output_queue->output_kstrings)[i].s = NULL;
+    kv_init(output_queue->sam_alignment_kvec[i].v);
   }
   output_queue->output_sam_file = sam_open_format(output_file_path, "w", NULL);
   output_queue->sam_header = sam_hdr_init();
   output_sam_header(output_file_path, reference_sequence_batch, output_queue);
-  //output_queue->output_file = fopen(output_file_path, "w");
-  //if (output_queue->output_file == NULL) {
-  //  fprintf(stderr, "Cannot open output file.\n");
-  //  exit(EXIT_FAILURE);
-  //}
   fprintf(stderr, "Initialize output queue successfully!\n");
 }
 
@@ -40,19 +25,13 @@ void destroy_output_queue(OutputQueue *output_queue) {
   pthread_cond_destroy(&(output_queue->pro_cond));
   pthread_cond_destroy(&(output_queue->con_cond));
   // free alignments
-  if (output_queue != NULL) {
-    for (size_t i = 0; i < output_queue->max_size; ++i) {
-      //if (output_queue->output_kstrings[i].s != NULL) {
-      //  free(output_queue->output_kstrings[i].s);
-      //}
-      //if (output_queue->sam_alignments[i].data != NULL) {
-      //  free(output_queue->sam_alignments[i].data);
-      //}
-      bam_destroy1(output_queue->sam_alignments[i]);
+  for (size_t i = 0; i < output_queue->max_size; ++i) {
+    for (size_t si = 0; si < kv_size(output_queue->sam_alignment_kvec[i].v); ++si) {
+      bam_destroy1(kv_A(output_queue->sam_alignment_kvec[i].v, si));
     }
-    free(output_queue->sam_alignments);
-    //free(output_queue->output_kstrings);
+    kv_destroy(output_queue->sam_alignment_kvec[i].v);
   }
+  free(output_queue->sam_alignment_kvec);
   // free header
   //free(output_queue->sam_header->target_len);
   //free(output_queue->sam_header->target_name);
@@ -61,19 +40,17 @@ void destroy_output_queue(OutputQueue *output_queue) {
   }
   sam_hdr_destroy(output_queue->sam_header);
   sam_close(output_queue->output_sam_file);
-  //fclose(output_queue->output_file);
   fprintf(stderr, "Destroy output queue successfully!\n");
 }
 
-void push_output_queue(bam1_t **sam_alignment, OutputQueue *output_queue) {
+void push_output_queue(kvec_t_bam1_t_ptr *sam_alignment_kvec, OutputQueue *output_queue) {
   pthread_mutex_lock(&(output_queue->queue_mutex));
   // Wait if the queue is full
   while (output_queue->size == output_queue->max_size) {
     pthread_cond_wait(&(output_queue->con_cond), &(output_queue->queue_mutex));
   }
   // Push one result into the queue
-  //swap_kstring_t(&(output_queue->output_kstrings[output_queue->rear]), result);
-  swap_bam1_t(sam_alignment, &(output_queue->sam_alignments[output_queue->rear]));
+  kv_swap(bam1_t*, sam_alignment_kvec->v, output_queue->sam_alignment_kvec[output_queue->rear].v);
   output_queue->rear = (output_queue->rear + 1) % output_queue->max_size;
   ++(output_queue->size);
   pthread_cond_signal(&(output_queue->pro_cond));
@@ -82,9 +59,9 @@ void push_output_queue(bam1_t **sam_alignment, OutputQueue *output_queue) {
 
 void *output_queue_thread(void *output_queue_v) {
   OutputQueue *output_queue = (OutputQueue*)output_queue_v;
+  kvec_t_bam1_t_ptr sam_alignment_kvec;
+  kv_init(sam_alignment_kvec.v);
   while (1) {
-    //char *result_string;
-    bam1_t *sam_alignment = bam_init1();
     pthread_mutex_lock(&(output_queue->queue_mutex));
     while (output_queue->size == 0) {
       // If all mapping threads finished, then the output queue thread can stop
@@ -96,19 +73,21 @@ void *output_queue_thread(void *output_queue_v) {
       pthread_cond_wait(&(output_queue->pro_cond), &(output_queue->queue_mutex));
     }
     // Take one result from queue
-    //kstring_t output_string = {0, 0, NULL};
-    //swap_kstring_t(&output_string, &(output_queue->output_kstrings[output_queue->front]));
-    swap_bam1_t(&sam_alignment, &(output_queue->sam_alignments[output_queue->front]));
+    kv_swap(bam1_t*, sam_alignment_kvec.v, output_queue->sam_alignment_kvec[output_queue->front].v);
     output_queue->front = (output_queue->front + 1) % output_queue->max_size;
     --(output_queue->size);
     pthread_cond_signal(&(output_queue->con_cond));
     pthread_mutex_unlock(&(output_queue->queue_mutex));
     // Save the result into the file
-    int htslib_err = sam_write1(output_queue->output_sam_file, output_queue->sam_header, sam_alignment);
-    assert(htslib_err >= 0);
-    //fprintf(stderr, "Output one sam\n");
-    bam_destroy1(sam_alignment);
+    for (size_t si = 0; si < kv_size(sam_alignment_kvec.v); ++si) {
+      int htslib_err = sam_write1(output_queue->output_sam_file, output_queue->sam_header, kv_A(sam_alignment_kvec.v, si));
+      assert(htslib_err >= 0);
+    }
   }
+  for (size_t si = 0; si < kv_size(sam_alignment_kvec.v); ++si) {
+    bam_destroy1(kv_A(sam_alignment_kvec.v, si));
+  }
+  kv_destroy(sam_alignment_kvec.v);
 }
 
 void output_sam_header(const char *output_file_path, const SequenceBatch *reference_sequence_batch, OutputQueue *output_queue) {
