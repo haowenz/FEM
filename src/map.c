@@ -33,7 +33,7 @@ void *single_end_read_mapping_thread(void *mapping_args_v) {
       mapping_args->mapping_stats.num_candidates += num_candidates;
       if (num_candidates > 0) {
         // Verify candidates
-        uint32_t num_mappings = verify_candidates(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, POSITIVE_DIRECTION, mapping_args->reference_sequence_batch, candidates.v.a, num_candidates, &mappings);
+        uint32_t num_mappings = verify_candidates(mapping_args->fem_args, &read_batch, read_index, POSITIVE_DIRECTION, mapping_args->reference_sequence_batch, candidates.v.a, num_candidates, &mappings);
         mapping_args->mapping_stats.num_mappings += num_mappings;
       }
       // Negative strand
@@ -44,12 +44,14 @@ void *single_end_read_mapping_thread(void *mapping_args_v) {
       mapping_args->mapping_stats.num_candidates += num_candidates;
       if (num_candidates > 0) {
         // Verify candidates
-        uint32_t num_mappings = verify_candidates(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, NEGATIVE_DIRECTION, mapping_args->reference_sequence_batch, candidates.v.a, num_candidates, &mappings);
+        uint32_t num_mappings = verify_candidates(mapping_args->fem_args, &read_batch, read_index, NEGATIVE_DIRECTION, mapping_args->reference_sequence_batch, candidates.v.a, num_candidates, &mappings);
         mapping_args->mapping_stats.num_mappings += num_mappings;
       }
       if (kv_size(mappings.v) > 0) {
         ++(mapping_args->mapping_stats.num_mapped_reads);
-        process_mappings(mapping_args->fem_args, mapping_args->output_queue, &read_batch, read_index, mapping_args->reference_sequence_batch, mappings.v.a, kv_size(mappings.v), &sam_alignment_kvec);
+        process_mappings(mapping_args->fem_args, &read_batch, read_index, mapping_args->reference_sequence_batch, mappings.v.a, kv_size(mappings.v), &sam_alignment_kvec);
+        // Output mappings
+        push_output_queue(&sam_alignment_kvec, mapping_args->output_queue);
       }
     }
     fprintf(stderr, "Mapped read batch in %fs.\n", get_real_time() - real_start_time);

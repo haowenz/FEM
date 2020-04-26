@@ -1,7 +1,7 @@
 #include "align.h"
 #include "ksort.h"
 
-uint32_t verify_candidates(const FEMArgs *fem_args, OutputQueue *output_queue, const SequenceBatch *read_sequence_batch, uint32_t read_sequence_index, uint8_t direction, const SequenceBatch *reference_sequence_batch, const uint64_t *candidates, uint32_t num_candidates, kvec_t_Mapping *mappings) {
+uint32_t verify_candidates(const FEMArgs *fem_args, const SequenceBatch *read_sequence_batch, uint32_t read_sequence_index, uint8_t direction, const SequenceBatch *reference_sequence_batch, const uint64_t *candidates, uint32_t num_candidates, kvec_t_Mapping *mappings) {
   int read_length = get_sequence_length_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
   const char *read_sequence = get_sequence_from_sequence_batch_at(read_sequence_batch, read_sequence_index);
   if (direction == NEGATIVE_DIRECTION) {
@@ -53,7 +53,7 @@ uint32_t verify_candidates(const FEMArgs *fem_args, OutputQueue *output_queue, c
 #define MappingSortKey(m) ((((uint64_t)(m).edit_distance)<<60)|(((uint64_t)(m).direction)<<59)|((m).candidate_position+(m).end_position_offset))
 KRADIX_SORT_INIT(mapping, Mapping, MappingSortKey, 8);
 
-uint32_t process_mappings(const FEMArgs *fem_args, OutputQueue *output_queue, const SequenceBatch *read_sequence_batch, uint32_t read_sequence_index, const SequenceBatch *reference_sequence_batch, Mapping *mappings, uint32_t num_mappings, kvec_t_bam1_t_ptr *sam_alignment_kvec) {
+uint32_t process_mappings(const FEMArgs *fem_args, const SequenceBatch *read_sequence_batch, uint32_t read_sequence_index, const SequenceBatch *reference_sequence_batch, Mapping *mappings, uint32_t num_mappings, kvec_t_bam1_t_ptr *sam_alignment_kvec) {
   radix_sort_mapping(mappings, mappings + num_mappings);
   kstring_t MD_tag = {0, 0, NULL};
   kvec_t_uint32_t cigar_uint32_t;
@@ -87,7 +87,6 @@ uint32_t process_mappings(const FEMArgs *fem_args, OutputQueue *output_queue, co
       generate_bam1_t(edit_distance, &MD_tag, mapping_start_position, reference_sequence_index, mapping_quality, flag, read_name, read_name_length, cigar_uint32_t.v.a, kv_size(cigar_uint32_t.v), read_sequence, read_qual, read_length, kv_A(sam_alignment_kvec->v, mi));
     }
   }
-  push_output_queue(sam_alignment_kvec, output_queue);
   kv_destroy(cigar_uint32_t.v);
   return num_mappings;
 }
