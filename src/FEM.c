@@ -5,7 +5,7 @@
 #include "FEM_map.h"
 #include "utils.h"
 
-#define FEM_VERSION "0.1"
+#define FEM_VERSION "0.2"
 
 static inline void print_usage() {
   fprintf(stderr, "\n");
