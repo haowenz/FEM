@@ -3,15 +3,16 @@ src_dir=src
 objs_dir=objs
 objs+=$(patsubst %.c,$(objs_dir)/%.o,$(c_source))
 
-htslib_dir ?= extern/htslib
+fem_dir = $(shell pwd)
+htslib_dir ?= ${fem_dir}/extern/htslib/build
 htslib_include_dir ?= ${htslib_dir}/include
 htslib_lib_dir ?= ${htslib_dir}/lib
 htslib_lib ?= hts
 
 cxx=gcc
-cxxflags=-g -Wall -O3 -march=native -I${htslib_include_dir}
+cxxflags=-Wall -O3 -march=native -I${htslib_include_dir}
 
-ldflags=-L${htslib_lib_dir} -Wl,-rpath=${htslib_lib_dir} -l${htslib_lib} -lpthread -lm -lz
+ldflags=-L${htslib_lib_dir} -l${htslib_lib} -lpthread -lm -lz
 exec=FEM
 
 .PHONY: all
@@ -21,11 +22,12 @@ all: htslib check_htslib mk_obj_dir $(exec)
 htslib:
 	git submodule update --init --recursive
 	cd extern/htslib;\
+	mkdir build;\
 	autoheader;\
 	autoconf;\
-	./configure CC=${cxx} --disable-bz2 --disable-lzma;\
-	make;\
-	make prefix=. install
+	./configure CC="${cxx}" --disable-bz2 --disable-lzma --prefix="${htslib_dir}";\
+	make -j;\
+	make install
 
 .PHONY: check_htslib
 check_htslib:
@@ -44,5 +46,6 @@ $(objs_dir)/%.o: $(src_dir)/%.c
 
 .PHONY: clean
 clean:
-	cd extern/htslib && make clean
+	cd "extern/htslib" && make clean
+	rm -rf "${htslib_dir}"
 	rm -rf $(exec) $(objs_dir)
