@@ -12,7 +12,7 @@ htslib_lib ?= hts
 cxx=gcc
 cxxflags=-Wall -O3 -march=native -I${htslib_include_dir}
 
-ldflags=-L${htslib_lib_dir} -l${htslib_lib} -lpthread -lm -lz
+ldflags=-L${htslib_lib_dir} -Wl,-rpath,${htslib_lib_dir} -l${htslib_lib} -lpthread -lm -lz
 exec=FEM
 
 .PHONY: all
