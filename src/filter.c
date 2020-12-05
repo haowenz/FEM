@@ -213,7 +213,7 @@ uint32_t generate_group_seeding_candidates(const FEMArgs *fem_args, const Sequen
   }
   for (size_t i = 1; i < kv_size(candidates->v); ++i) {
     if (kv_A(candidates->v, i - 1) == kv_A(candidates->v, i)) {
-      fprintf(stderr, "%lu\n", kv_A(candidates->v, i));
+      fprintf(stderr, "%"PRIu64"\n", kv_A(candidates->v, i));
     }
   }
   kv_swap(uint64_t, buffer1->v, candidates->v);

@@ -211,12 +211,12 @@ int map_main(int argc, char *argv[]) {
     num_mappings += mapping_args[i].mapping_stats.num_mappings;
   }
 
-  fprintf(stderr, "The number of read: %lu.\n", num_reads);
-  fprintf(stderr, "The number of mapped read: %lu.\n", num_mapped_reads);
-  fprintf(stderr, "The number of candidate before additional q-gram filter: %lu.\n", num_candidates_without_additonal_qgram_filter);
-  fprintf(stderr, "The number of candidate: %lu.\n", num_candidates);
-  fprintf(stderr, "The number of mapping: %lu.\n", num_mappings);
-  fprintf(stderr, "Time: %fs.\n", get_real_time() - startTime);
+  fprintf(stderr, "The number of read: %"PRIu64"\n", num_reads);
+  fprintf(stderr, "The number of mapped read: %"PRIu64"\n", num_mapped_reads);
+  fprintf(stderr, "The number of candidate before additional q-gram filter: %"PRIu64"\n", num_candidates_without_additonal_qgram_filter);
+  fprintf(stderr, "The number of candidate: %"PRIu64"\n", num_candidates);
+  fprintf(stderr, "The number of mapping: %"PRIu64"\n", num_mappings);
+  fprintf(stderr, "Time: %fs\n", get_real_time() - startTime);
 
   destroy_output_queue(&output_queue);
   destroy_input_queue(&input_queue);

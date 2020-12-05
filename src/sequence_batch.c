@@ -72,7 +72,7 @@ void load_batch_of_sequences_into_sequence_batch(SequenceBatch *sequence_batch) 
   }
   if (sequence_batch->num_loaded_sequences != 0) {
     fprintf(stderr, "Number of sequences: %d\n", sequence_batch->num_loaded_sequences);
-    fprintf(stderr, "Number of bases: %ld\n", sequence_batch->num_bases);
+    fprintf(stderr, "Number of bases: %"PRIu64"\n", sequence_batch->num_bases);
     fprintf(stderr, "Loaded sequence batch successfully in %fs\n", get_real_time() - real_start_time);
   } else {
     fprintf(stderr, "No more sequences.\n");
@@ -116,7 +116,7 @@ void load_all_sequences_into_sequence_batch(SequenceBatch *sequence_batch) {
     kv_init(kv_A(sequence_batch->negative_sequences, i).v);
   }
   fprintf(stderr, "Number of sequences: %d\n", sequence_batch->num_loaded_sequences);
-  fprintf(stderr, "Number of bases: %ld\n", sequence_batch->num_bases);
+  fprintf(stderr, "Number of bases: %"PRIu64"\n", sequence_batch->num_bases);
   fprintf(stderr, "Loaded all sequences successfully in %fs\n", get_real_time() - real_start_time);
 }
 
